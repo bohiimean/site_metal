@@ -1,0 +1,73 @@
+{% load static %}
+{% with image=product.prefetched_images.0 variant=product.prefetched_variants.0 %}
+<article class="product-card group flex flex-col">
+
+  <!-- Изображение -->
+  <a href="{% url 'catalog:detail' product.slug %}" class="block relative overflow-hidden rounded-sm mb-3" style="aspect-ratio:4/3">
+    {% if image and image.image %}
+      <img src="{{ image.card.url }}"
+           alt="{{ product.name }}"
+           class="w-full h-full object-cover"
+           loading="lazy">
+    {% else %}
+      <div class="img-placeholder w-full h-full text-center px-3">
+        {{ product.profile_code|default:product.name }}
+      </div>
+    {% endif %}
+
+    {% if product.is_new %}
+      <span class="badge-new absolute top-2 left-2">Новинка</span>
+    {% endif %}
+
+    {% if variant and variant.in_stock == 'on_order' %}
+      <span class="absolute inset-0 flex items-end justify-center pb-3">
+        <span class="bg-black/60 text-white text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-sm">
+          Под заказ
+        </span>
+      </span>
+    {% endif %}
+  </a>
+
+  <!-- Контент -->
+  <div class="flex flex-col flex-1 gap-1">
+    <a href="{% url 'catalog:detail' product.slug %}"
+       class="text-[13px] font-medium text-primary leading-snug hover:text-accent transition-colors line-clamp-2">
+      {{ product.name }}
+    </a>
+
+    {% if variant %}
+      <p class="text-[11px] text-muted">
+        {{ variant.material.name }}
+        {% if variant.steel_grade %}&nbsp;·&nbsp;{{ variant.steel_grade.name }}{% endif %}
+        {% if variant.length_m %}&nbsp;·&nbsp;{{ variant.length_m }}&nbsp;м{% endif %}
+      </p>
+    {% endif %}
+
+    <div class="flex items-center justify-between gap-2 mt-auto pt-2">
+      <div>
+        {% if product.min_price %}
+          <span class="text-[16px] font-bold text-primary">
+            {{ product.min_price|floatformat:0 }} ₽
+          </span>
+          {% if variant %}
+            <span class="text-[11px] text-muted">/{{ variant.get_unit_display }}</span>
+          {% endif %}
+        {% endif %}
+      </div>
+      <button
+        class="btn-accent text-[10px] px-3 py-2 shrink-0"
+        @click="$store.cart.add({
+          name: '{{ product.name|escapejs }}',
+          slug: '{{ product.slug }}',
+          sku:  '{{ variant.sku|default:''|escapejs }}',
+          qty:  1,
+          price: '{{ product.min_price|default:0 }}',
+          unit:  '{{ variant.get_unit_display|default:''|escapejs }}'
+        })">
+        Заказать
+      </button>
+    </div>
+  </div>
+
+</article>
+{% endwith %}

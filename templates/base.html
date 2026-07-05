@@ -41,6 +41,8 @@
   <!-- Alpine.js -->
   <script>
     document.addEventListener('alpine:init', function () {
+
+      // ─ Тема ─
       Alpine.data('themeToggle', function () {
         return {
           dark: document.documentElement.classList.contains('dark'),
@@ -53,6 +55,38 @@
           }
         };
       });
+
+      // ─ Глобальная корзина (localStorage) ─
+      Alpine.store('cart', {
+        items: JSON.parse(localStorage.getItem('cart') || '[]'),
+
+        add(item) {
+          var ex = this.items.find(function(i) { return i.sku === item.sku; });
+          if (ex) { ex.qty += (item.qty || 1); }
+          else     { this.items.push(Object.assign({ qty: 1 }, item)); }
+          this._save();
+        },
+        remove(sku) {
+          this.items = this.items.filter(function(i) { return i.sku !== sku; });
+          this._save();
+        },
+        setQty(sku, qty) {
+          var ex = this.items.find(function(i) { return i.sku === sku; });
+          if (ex) { ex.qty = Math.max(1, qty); this._save(); }
+        },
+        clear() { this.items = []; this._save(); },
+        _save() { localStorage.setItem('cart', JSON.stringify(this.items)); },
+
+        get count() {
+          return this.items.reduce(function(s, i) { return s + i.qty; }, 0);
+        },
+        get total() {
+          return this.items.reduce(function(s, i) {
+            return s + (parseFloat(i.price) || 0) * i.qty;
+          }, 0);
+        },
+      });
+
     });
   </script>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>

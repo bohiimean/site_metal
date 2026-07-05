@@ -1,0 +1,295 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ product.seo_title|default:product.name }} — МЕТАПРОФ{% endblock %}
+{% block meta_description %}{{ product.seo_description }}{% endblock %}
+{% block canonical %}<link rel="canonical" href="{{ request.scheme }}://{{ request.get_host }}{{ request.path }}">{% endblock %}
+
+{% block extra_head %}
+{{ variants_json|json_script:"variants-data" }}
+{{ combinations_json|json_script:"combinations-data" }}
+{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-6 lg:px-12 py-6"
+     x-data="productVariants()"
+     x-init="init()">
+
+  <!-- Хлебные крошки -->
+  <nav class="text-[11px] text-muted mb-6 flex items-center gap-1.5">
+    <a href="/" class="hover:text-accent">Главная</a>
+    <span>/</span>
+    <a href="{% url 'catalog:index' %}" class="hover:text-accent">Каталог</a>
+    <span>/</span>
+    {% if product.category %}
+      <a href="{% url 'catalog:detail' product.category.slug %}" class="hover:text-accent">
+        {{ product.category.name }}
+      </a>
+      <span>/</span>
+    {% endif %}
+    <span class="text-primary">{{ product.name }}</span>
+  </nav>
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-16">
+
+    <!-- ─── Изображения ─── -->
+    <div>
+      <!-- Главное фото -->
+      <div class="relative rounded-sm overflow-hidden bg-surface-alt mb-3" style="aspect-ratio:4/3">
+        <template x-if="current && current.image_url">
+          <img :src="current.image_url" :alt="'{{ product.name|escapejs }}'"
+               class="w-full h-full object-cover">
+        </template>
+        <template x-if="!current || !current.image_url">
+          {% if images %}
+            <img src="{{ images.0.gallery.url }}" alt="{{ product.name }}"
+                 class="w-full h-full object-cover">
+          {% else %}
+            <div class="img-placeholder w-full h-full">
+              {{ product.profile_code|default:product.name }}
+            </div>
+          {% endif %}
+        </template>
+
+        <!-- Подпись поверх фото -->
+        <div class="absolute bottom-3 left-3 right-3 text-[10px] font-mono text-muted pointer-events-none">
+          <span x-text="current ? (current.material_name + (current.finish_name ? ' · ' + current.finish_name : '') + (current.length_m ? ' · ' + current.length_m + ' м' : '')) : ''"></span>
+        </div>
+      </div>
+
+      <!-- Миниатюры -->
+      {% if images|length > 1 %}
+      <div class="flex gap-2">
+        {% for img in images %}
+          <button @click="setImage('{{ img.card.url }}')"
+                  class="w-16 h-16 rounded-sm overflow-hidden border-2 transition-colors"
+                  :class="activeThumb === '{{ img.card.url }}' ? 'border-accent' : 'border-border'">
+            <img src="{{ img.thumb.url }}" alt="" class="w-full h-full object-cover">
+          </button>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- ─── Информация о товаре ─── -->
+    <div class="flex flex-col gap-5">
+
+      <div>
+        <h1 class="text-[26px] font-bold text-primary leading-tight mb-1">{{ product.name }}</h1>
+        <p class="text-[12px] text-muted" x-text="current ? ('Арт. ' + current.sku) : ''"></p>
+        {% if product.profile_code %}
+          <p class="text-[11px] text-muted mt-0.5">{{ product.profile_code }}</p>
+        {% endif %}
+      </div>
+
+      <!-- Цена -->
+      <div>
+        <div class="flex items-baseline gap-2">
+          <span class="text-[34px] font-black text-primary" x-text="current ? (parseFloat(current.price).toLocaleString('ru-RU') + ' ₽') : '—'"></span>
+          <span class="text-[13px] text-muted" x-text="current ? current.unit_display : ''"></span>
+        </div>
+        <span class="inline-block mt-1 text-[11px] font-medium px-2 py-0.5 rounded-sm"
+              :class="{
+                'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400': current && current.in_stock === 'in_stock',
+                'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400': current && current.in_stock === 'on_order',
+                'bg-border text-muted': !current || current.in_stock === 'out_of_stock'
+              }"
+              x-text="current ? current.in_stock_display : ''">
+        </span>
+      </div>
+
+      <!-- Тип металла -->
+      <template x-if="uniqueMaterials.length > 1">
+        <div>
+          <p class="text-[11px] font-semibold uppercase tracking-widest text-muted mb-2">Тип металла</p>
+          <div class="flex flex-wrap gap-2">
+            <template x-for="mat in uniqueMaterials" :key="mat.id">
+              <button
+                @click="selectMaterial(mat.id)"
+                :class="sel.material_id === mat.id
+                  ? 'bg-accent text-accent-fg border-accent'
+                  : 'bg-surface text-primary border-border hover:border-accent'"
+                class="px-4 py-2 text-[12px] font-medium border rounded-sm transition-colors"
+                x-text="mat.name">
+              </button>
+            </template>
+          </div>
+        </div>
+      </template>
+
+      <!-- Цвет / обработка -->
+      <template x-if="uniqueColors.length > 0">
+        <div>
+          <p class="text-[11px] font-semibold uppercase tracking-widest text-muted mb-2">
+            Цвет / отделка: <span class="normal-case font-normal" x-text="current && current.color_name ? current.color_name : ''"></span>
+          </p>
+          <div class="flex flex-wrap gap-2">
+            <template x-for="c in uniqueColors" :key="c.id">
+              <button
+                @click="selectColor(c.id)"
+                :disabled="!isValid('color_id', c.id)"
+                :class="{
+                  'ring-2 ring-accent ring-offset-2': sel.color_id === c.id,
+                  'opacity-30 cursor-not-allowed': !isValid('color_id', c.id)
+                }"
+                class="w-8 h-8 rounded-full border border-border transition-all"
+                :style="c.hex ? 'background:' + c.hex : 'background:var(--color-border)'"
+                :title="c.name">
+              </button>
+            </template>
+          </div>
+        </div>
+      </template>
+
+      <!-- Длина -->
+      <template x-if="uniqueLengths.length > 0">
+        <div>
+          <p class="text-[11px] font-semibold uppercase tracking-widest text-muted mb-2">Длина</p>
+          <div class="flex flex-wrap gap-2">
+            <template x-for="len in uniqueLengths" :key="len">
+              <button
+                @click="selectLength(len)"
+                :disabled="!isValid('length_m', len)"
+                :class="{
+                  'bg-accent text-accent-fg border-accent': sel.length_m === len,
+                  'bg-surface text-primary border-border hover:border-accent': sel.length_m !== len,
+                  'opacity-30 cursor-not-allowed': !isValid('length_m', len)
+                }"
+                class="px-4 py-2 text-[12px] font-medium border rounded-sm transition-colors"
+                x-text="len + ' м'">
+              </button>
+            </template>
+          </div>
+        </div>
+      </template>
+
+      <!-- CTA -->
+      <div class="flex flex-col sm:flex-row gap-3 pt-2">
+        <button
+          @click="addCurrentToCart()"
+          :disabled="!current || current.in_stock === 'out_of_stock'"
+          class="btn-accent flex-1 disabled:opacity-50 disabled:cursor-not-allowed">
+          В корзину
+        </button>
+        <button class="btn-outline flex-1">Связаться с менеджером</button>
+      </div>
+
+      <!-- Описание -->
+      {% if product.description %}
+      <div class="border-t border-border pt-5">
+        <p class="text-[13px] text-muted leading-relaxed">{{ product.description }}</p>
+      </div>
+      {% endif %}
+
+    </div>
+  </div>
+</div>
+
+<script>
+function productVariants() {
+  return {
+    variants: [],
+    combinations: [],
+    sel: { material_id: null, steel_grade_id: null, finish_id: null, color_id: null, length_m: null },
+    current: null,
+    activeThumb: null,
+
+    init() {
+      this.variants     = JSON.parse(document.getElementById('variants-data').textContent);
+      this.combinations = JSON.parse(document.getElementById('combinations-data').textContent);
+      if (!this.variants.length) return;
+
+      const sku = new URLSearchParams(location.search).get('sku');
+      const v   = sku ? this.variants.find(v => v.sku === sku) : null;
+      this._pickVariant(v || this.variants[0]);
+    },
+
+    _pickVariant(v) {
+      if (!v) return;
+      this.sel = {
+        material_id:    v.material_id,
+        steel_grade_id: v.steel_grade_id,
+        finish_id:      v.finish_id,
+        color_id:       v.color_id,
+        length_m:       v.length_m,
+      };
+      this.current    = v;
+      this.activeThumb = v.image_url;
+      history.replaceState({}, '', '?sku=' + encodeURIComponent(v.sku));
+    },
+
+    _autoSelect() {
+      const s   = this.sel;
+      const match = this.variants.find(v =>
+        (s.material_id    == null || v.material_id    === s.material_id)    &&
+        (s.steel_grade_id == null || v.steel_grade_id === s.steel_grade_id) &&
+        (s.finish_id      == null || v.finish_id      === s.finish_id)      &&
+        (s.color_id       == null || v.color_id       === s.color_id)       &&
+        (s.length_m       == null || v.length_m       === s.length_m)
+      );
+      if (match) this._pickVariant(match);
+    },
+
+    selectMaterial(id) {
+      this.sel = { material_id: id, steel_grade_id: null, finish_id: null, color_id: null, length_m: null };
+      this._autoSelect();
+    },
+    selectColor(id) {
+      this.sel.color_id = id;
+      this._autoSelect();
+    },
+    selectLength(len) {
+      this.sel.length_m = len;
+      this._autoSelect();
+    },
+    setImage(url) {
+      this.activeThumb = url;
+      if (this.current) this.current = { ...this.current, image_url: url };
+    },
+
+    isValid(field, value) {
+      const s = this.sel;
+      return this.combinations.some(c => {
+        if (c[field] !== value) return false;
+        if (field !== 'material_id'    && s.material_id    != null && c.material_id    !== s.material_id)    return false;
+        if (field !== 'steel_grade_id' && s.steel_grade_id != null && c.steel_grade_id !== s.steel_grade_id) return false;
+        if (field !== 'finish_id'      && s.finish_id      != null && c.finish_id      !== s.finish_id)      return false;
+        if (field !== 'color_id'       && s.color_id       != null && c.color_id       !== s.color_id)       return false;
+        if (field !== 'length_m'       && s.length_m       != null && c.length_m       !== s.length_m)       return false;
+        return true;
+      });
+    },
+
+    get uniqueMaterials() {
+      const seen = {};
+      return this.variants.filter(v => v.material_id && !seen[v.material_id] && (seen[v.material_id] = true))
+                          .map(v => ({ id: v.material_id, name: v.material_name }));
+    },
+    get uniqueColors() {
+      const seen = {};
+      return this.variants.filter(v => v.color_id && !seen[v.color_id] && (seen[v.color_id] = true))
+                          .map(v => ({ id: v.color_id, name: v.color_name, hex: v.color_hex }));
+    },
+    get uniqueLengths() {
+      const seen = {};
+      return this.variants.filter(v => v.length_m && !seen[v.length_m] && (seen[v.length_m] = true))
+                          .map(v => v.length_m)
+                          .sort((a, b) => parseFloat(a) - parseFloat(b));
+    },
+
+    addCurrentToCart() {
+      if (!this.current) return;
+      const v = this.current;
+      this.$store.cart.add({
+        name:  '{{ product.name|escapejs }}',
+        slug:  '{{ product.slug }}',
+        sku:   v.sku,
+        qty:   1,
+        price: v.price,
+        unit:  v.unit_display,
+      });
+    },
+  };
+}
+</script>
+{% endblock %}

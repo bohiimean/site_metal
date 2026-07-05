@@ -1,0 +1,38 @@
+<!-- Сетка товаров (htmx-фрагмент для фильтрации) -->
+<div class="flex items-center justify-between mb-5 gap-4">
+  <p class="text-[12px] text-muted">
+    Показано {{ page_obj.start_index }}–{{ page_obj.end_index }} из {{ paginator.count }} товаров
+  </p>
+  <select name="sort" form="filter-form"
+          class="text-[12px] border border-border rounded px-3 py-1.5 bg-surface text-primary cursor-pointer">
+    <option value="new"       {% if sort == 'new'       %}selected{% endif %}>По новизне</option>
+    <option value="price_asc" {% if sort == 'price_asc' %}selected{% endif %}>Цена: по возрастанию</option>
+    <option value="price_desc"{% if sort == 'price_desc'%}selected{% endif %}>Цена: по убыванию</option>
+  </select>
+</div>
+
+<div id="product-list" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+  {% for product in page_obj %}
+    {% include "catalog/_product_card.html" %}
+  {% empty %}
+    <div class="col-span-3 py-16 text-center">
+      <p class="text-muted text-[13px] mb-3">Товары не найдены</p>
+      <a href="." class="btn-outline text-[11px]">Сбросить фильтры</a>
+    </div>
+  {% endfor %}
+</div>
+
+{% if page_obj.has_next %}
+<div class="mt-8 text-center">
+  <button
+    hx-get="?page={{ page_obj.next_page_number }}"
+    hx-target="#product-list"
+    hx-swap="beforeend"
+    hx-include="#filter-form"
+    hx-indicator="#load-indicator"
+    class="btn-outline">
+    Показать ещё
+  </button>
+  <span id="load-indicator" class="htmx-indicator ml-3 text-[12px] text-muted">Загрузка…</span>
+</div>
+{% endif %}
