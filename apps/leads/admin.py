@@ -1,0 +1,62 @@
+from django.contrib import admin
+from django.utils.html import format_html
+from .models import Lead
+
+
+def make_status_action(status, label):
+    def action(modeladmin, request, queryset):
+        queryset.update(status=status)
+    action.__name__ = f'set_status_{status}'
+    action.short_description = label
+    return action
+
+
+@admin.register(Lead)
+class LeadAdmin(admin.ModelAdmin):
+    list_display = ['id', 'name', 'phone', 'source_badge', 'status_badge', 'created_at']
+    list_filter = ['status', 'source']
+    search_fields = ['name', 'phone']
+    readonly_fields = ['created_at', 'updated_at', 'cart_snapshot_display']
+    actions = [
+        make_status_action('in_progress', 'Взять в работу'),
+        make_status_action('closed',      'Закрыть'),
+        make_status_action('new',         'Вернуть в «Новые»'),
+    ]
+    fieldsets = [
+        ('Контакт', {'fields': ['name', 'phone', 'comment', 'consent_pdn']}),
+        ('Статус', {'fields': ['source', 'status']}),
+        ('Корзина', {'fields': ['cart_snapshot_display']}),
+        ('Даты', {'fields': ['created_at', 'updated_at']}),
+    ]
+
+    def source_badge(self, obj):
+        colors = {'cart': '#3b82f6', 'callback_request': '#8b5cf6'}
+        color = colors.get(obj.source, '#6b7280')
+        return format_html(
+            '<span style="background:{};color:#fff;padding:2px 6px;border-radius:3px;font-size:11px">{}</span>',
+            color, obj.get_source_display(),
+        )
+    source_badge.short_description = 'Источник'
+
+    def status_badge(self, obj):
+        colors = {'new': '#f59e0b', 'in_progress': '#3b82f6', 'closed': '#10b981'}
+        color = colors.get(obj.status, '#6b7280')
+        return format_html(
+            '<span style="background:{};color:#fff;padding:2px 6px;border-radius:3px;font-size:11px">{}</span>',
+            color, obj.get_status_display(),
+        )
+    status_badge.short_description = 'Статус'
+
+    def cart_snapshot_display(self, obj):
+        if not obj.cart_snapshot:
+            return '— (заявка на звонок)'
+        rows = []
+        for item in obj.cart_snapshot:
+            rows.append(
+                f"{item.get('name', '?')} &nbsp;·&nbsp; "
+                f"арт. {item.get('sku', '?')} &nbsp;·&nbsp; "
+                f"×{item.get('qty', 1)} &nbsp;·&nbsp; "
+                f"{item.get('price', '?')} ₽/{item.get('unit', '')}"
+            )
+        return format_html('<br>'.join(rows))
+    cart_snapshot_display.short_description = 'Состав корзины'
