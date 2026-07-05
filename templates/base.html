@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="ru" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}МЕТАПРОФ{% endblock %}</title>
+  <meta name="description" content="{% block meta_description %}{% endblock %}">
+  {% block canonical %}{% endblock %}
+
+  <!-- Manrope font -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Compiled Tailwind CSS -->
+  {% load static %}
+  <link rel="stylesheet" href="{% static 'css/output.css' %}">
+
+  <!-- Anti-FOUC: применяем тему ДО рендера страницы -->
+  <script>
+    (function () {
+      var saved = localStorage.getItem('theme');
+      var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      var isDark = saved === 'dark' || (!saved && prefersDark);
+      document.documentElement.classList.add(isDark ? 'dark' : 'light');
+    })();
+  </script>
+
+  {% block extra_head %}{% endblock %}
+</head>
+<body class="h-full flex flex-col bg-surface text-primary">
+
+  {% include "partials/_header.html" %}
+
+  <main class="flex-1">
+    {% block content %}{% endblock %}
+  </main>
+
+  {% include "partials/_footer.html" %}
+
+  <!-- Alpine.js -->
+  <script>
+    document.addEventListener('alpine:init', function () {
+      Alpine.data('themeToggle', function () {
+        return {
+          dark: document.documentElement.classList.contains('dark'),
+          toggle: function () {
+            this.dark = !this.dark;
+            var theme = this.dark ? 'dark' : 'light';
+            localStorage.setItem('theme', theme);
+            document.documentElement.classList.toggle('dark', this.dark);
+            document.documentElement.classList.toggle('light', !this.dark);
+          }
+        };
+      });
+    });
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+  <!-- htmx -->
+  <script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js"></script>
+
+  {% block extra_js %}{% endblock %}
+</body>
+</html>

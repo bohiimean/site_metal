@@ -1,0 +1,63 @@
+<header class="bg-surface border-b border-border" style="height:68px">
+  <div class="max-w-7xl mx-auto px-12 h-full flex items-center justify-between gap-6">
+
+    <!-- Логотип -->
+    <a href="/" class="text-[17px] font-bold tracking-tight shrink-0">
+      МЕТА<span class="text-accent">ПРОФ</span>
+    </a>
+
+    <!-- Навигация -->
+    <nav class="hidden md:flex items-center gap-7 text-[13px] font-medium text-muted">
+      <a href="/catalog/" class="hover:text-primary transition-colors">Каталог</a>
+      <a href="/dostavka/" class="hover:text-primary transition-colors">Доставка</a>
+      <a href="/o-kompanii/" class="hover:text-primary transition-colors">О компании</a>
+      <a href="/kontakty/" class="hover:text-primary transition-colors">Контакты</a>
+    </nav>
+
+    <div class="flex items-center gap-4 ml-auto">
+      <!-- Поиск -->
+      <div class="hidden lg:flex items-center gap-2 border border-border rounded-full px-3 py-1.5 text-[12px] text-muted w-44">
+        <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/>
+        </svg>
+        Поиск по каталогу…
+      </div>
+
+      <!-- Переключатель темы -->
+      <div x-data="themeToggle">
+        <button @click="toggle"
+                class="w-8 h-8 flex items-center justify-center rounded text-muted hover:text-primary transition-colors"
+                :aria-label="dark ? 'Светлая тема' : 'Тёмная тема'">
+          <!-- Иконка солнца (светлая тема активна) -->
+          <svg x-show="dark" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364-.707.707M6.343 17.657l-.707.707M17.657 17.657l-.707-.707M6.343 6.343l-.707-.707M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"/>
+          </svg>
+          <!-- Иконка луны (тёмная тема активна) -->
+          <svg x-show="!dark" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Телефон -->
+      <a href="tel:+74955405117" class="hidden xl:block text-[13px] font-semibold text-primary whitespace-nowrap">
+        +7 (495) 540-51-17
+      </a>
+
+      <!-- Корзина -->
+      <button class="relative w-8 h-8 flex items-center justify-center text-muted hover:text-primary transition-colors">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M3 3h2l.4 2M7 13h10l4-9H5.4M7 13L5.4 5M7 13l-1.5 6M17 13l1.5 6M9 19a1 1 0 1 0 0 2 1 1 0 0 0 0-2zm8 0a1 1 0 1 0 0 2 1 1 0 0 0 0-2z"/>
+        </svg>
+        <!-- Бейдж количества (Alpine покажет когда появятся товары) -->
+        <span class="absolute -top-1 -right-1 w-4 h-4 bg-accent text-accent-fg text-[9px] font-bold rounded-full flex items-center justify-center hidden">
+          0
+        </span>
+      </button>
+    </div>
+
+  </div>
+</header>

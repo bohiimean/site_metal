@@ -1,0 +1,168 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─── Тема А: «Латунный минимализм» (светлая, по умолчанию) ─── */
+:root {
+  --color-surface:       #ffffff;
+  --color-surface-alt:   #FBF8F3;
+  --color-surface-card:  #ffffff;
+
+  --color-text-primary:  #1C1A17;
+  --color-text-muted:    #A09080;
+
+  --color-accent:        #B8893A;
+  --color-accent-fg:     #ffffff;
+
+  --color-border:        #EDE8E0;
+  --color-border-strong: #E0D9CE;
+
+  --color-footer-bg:     #1A1714;
+  --color-footer-text:   #EAE6DE;
+
+  /* Hero всегда тёмный */
+  --color-hero-bg:       #1C1A17;
+  --color-hero-text:     #ffffff;
+}
+
+/* ─── Тема Б: «Стальная ночь» (тёмная) ─── */
+/* Системная тема */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-surface:       #111214;
+    --color-surface-alt:   #0D0F11;
+    --color-surface-card:  #181A1D;
+
+    --color-text-primary:  #EAE6DE;
+    --color-text-muted:    #6A6560;
+
+    --color-accent:        #D4A040;
+    --color-accent-fg:     #0A0C0E;
+
+    --color-border:        #1E2126;
+    --color-border-strong: #262A2F;
+
+    --color-footer-bg:     #080A0B;
+    --color-footer-text:   #EAE6DE;
+
+    --color-hero-bg:       #0A0C0E;
+    --color-hero-text:     #EAE6DE;
+  }
+}
+
+/* Ручное переключение через класс (перекрывает системную тему) */
+.dark {
+  --color-surface:       #111214;
+  --color-surface-alt:   #0D0F11;
+  --color-surface-card:  #181A1D;
+
+  --color-text-primary:  #EAE6DE;
+  --color-text-muted:    #6A6560;
+
+  --color-accent:        #D4A040;
+  --color-accent-fg:     #0A0C0E;
+
+  --color-border:        #1E2126;
+  --color-border-strong: #262A2F;
+
+  --color-footer-bg:     #080A0B;
+  --color-footer-text:   #EAE6DE;
+
+  --color-hero-bg:       #0A0C0E;
+  --color-hero-text:     #EAE6DE;
+}
+
+.light {
+  --color-surface:       #ffffff;
+  --color-surface-alt:   #FBF8F3;
+  --color-surface-card:  #ffffff;
+
+  --color-text-primary:  #1C1A17;
+  --color-text-muted:    #A09080;
+
+  --color-accent:        #B8893A;
+  --color-accent-fg:     #ffffff;
+
+  --color-border:        #EDE8E0;
+  --color-border-strong: #E0D9CE;
+
+  --color-footer-bg:     #1A1714;
+  --color-footer-text:   #EAE6DE;
+
+  --color-hero-bg:       #1C1A17;
+  --color-hero-text:     #ffffff;
+}
+
+/* ─── Базовые стили ─── */
+@layer base {
+  html {
+    font-family: 'Manrope', sans-serif;
+    background-color: var(--color-surface);
+    color: var(--color-text-primary);
+  }
+
+  /* Плавная смена темы */
+  *, *::before, *::after {
+    transition-property: background-color, border-color, color;
+    transition-duration: 150ms;
+    transition-timing-function: ease;
+  }
+}
+
+/* ─── Утилиты-компоненты проекта ─── */
+@layer components {
+  /* Кнопка-акцент (В корзину, Открыть каталог) */
+  .btn-accent {
+    @apply inline-flex items-center justify-center gap-2
+           bg-accent text-accent-fg
+           px-5 py-3.5
+           text-xs font-semibold uppercase tracking-wide
+           rounded transition-opacity hover:opacity-90;
+  }
+
+  /* Кнопка-аутлайн (Связаться с менеджером) */
+  .btn-outline {
+    @apply inline-flex items-center justify-center gap-2
+           border border-border-strong text-primary
+           px-5 py-3.5
+           text-xs font-semibold uppercase tracking-wide
+           rounded transition-colors hover:border-accent hover:text-accent;
+  }
+
+  /* Карточка товара */
+  .product-card {
+    @apply bg-surface-card border border-border rounded p-[13px]
+           flex flex-col gap-2;
+  }
+
+  /* Плейсхолдер изображения (диагональная штриховка, как в дизайне) */
+  .img-placeholder {
+    @apply flex items-center justify-center text-muted
+           text-[10px] font-mono uppercase tracking-widest;
+    background: repeating-linear-gradient(
+      -45deg,
+      var(--color-border) 0px,
+      var(--color-border) 1px,
+      var(--color-surface-alt) 1px,
+      var(--color-surface-alt) 8px
+    );
+  }
+
+  /* Бейдж «Новинка» */
+  .badge-new {
+    @apply inline-block bg-accent text-accent-fg
+           text-[10px] font-semibold uppercase tracking-widest
+           px-1.5 py-0.5 rounded-sm;
+  }
+
+  /* Чип фильтра / выбора */
+  .chip {
+    @apply px-3 py-1.5 text-xs font-medium border border-border rounded
+           cursor-pointer transition-colors
+           hover:border-accent hover:text-accent;
+  }
+
+  .chip-active {
+    @apply border-accent text-accent-fg bg-accent;
+  }
+}
