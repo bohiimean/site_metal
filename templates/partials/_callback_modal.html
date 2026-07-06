@@ -1,0 +1,50 @@
+{% load static %}
+{# Модал обратного звонка: управляется $store.callbackUI #}
+
+<div
+  x-data
+  x-show="$store.callbackUI.open"
+  @keydown.escape.window="$store.callbackUI.close()"
+  @callback:close.document="$store.callbackUI.close()"
+  class="fixed inset-0 z-50 flex items-center justify-center px-4"
+  style="display:none">
+
+  <!-- Затемнение -->
+  <div class="absolute inset-0 bg-black/50"
+       x-transition:enter="transition-opacity duration-200"
+       x-transition:enter-start="opacity-0"
+       x-transition:enter-end="opacity-100"
+       x-transition:leave="transition-opacity duration-200"
+       x-transition:leave-start="opacity-100"
+       x-transition:leave-end="opacity-0"
+       @click="$store.callbackUI.close()">
+  </div>
+
+  <!-- Карточка -->
+  <div class="relative w-full max-w-md bg-surface rounded shadow-[0_8px_40px_rgba(0,0,0,.18)] z-10"
+       x-transition:enter="transition duration-200"
+       x-transition:enter-start="opacity-0 scale-95"
+       x-transition:enter-end="opacity-100 scale-100"
+       x-transition:leave="transition duration-150"
+       x-transition:leave-start="opacity-100 scale-100"
+       x-transition:leave-end="opacity-0 scale-95"
+       @click.stop>
+
+    <!-- Шапка -->
+    <div class="flex items-center justify-between px-6 py-[22px] border-b border-border">
+      <p class="text-[17px] font-bold text-primary">Связаться с менеджером</p>
+      <button @click="$store.callbackUI.close()"
+              class="w-8 h-8 flex items-center justify-center text-muted hover:text-primary transition-colors rounded">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+          <path d="M5 5l14 14M19 5L5 19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Форма (заменяется htmx) -->
+    <div id="callback-form-area">
+      {% include "leads/_callback_form.html" %}
+    </div>
+
+  </div>
+</div>

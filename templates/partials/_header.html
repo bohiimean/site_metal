@@ -16,12 +16,24 @@
 
     <div class="flex items-center gap-4 ml-auto">
       <!-- Поиск -->
-      <div class="hidden lg:flex items-center gap-2 border border-border rounded-full px-3 py-1.5 text-[12px] text-muted w-44">
-        <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/>
-        </svg>
-        Поиск по каталогу…
-      </div>
+      <form action="/search/" method="get"
+            x-data="{ q: '{{ request.GET.q|default:''|escapejs }}' }"
+            class="hidden lg:flex items-center gap-2 border border-border rounded-full px-3 py-1.5 w-44 focus-within:w-56 focus-within:border-accent transition-all duration-200">
+        <button type="submit" class="shrink-0 text-muted hover:text-primary transition-colors">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/>
+          </svg>
+        </button>
+        <input type="text" name="q" x-model="q" placeholder="Поиск по каталогу…"
+               class="flex-1 min-w-0 bg-transparent outline-none text-[12px] text-primary placeholder:text-muted">
+        <button x-show="q" x-cloak type="button"
+                @click="q = ''; $nextTick(() => $el.closest('form').submit())"
+                class="shrink-0 text-muted hover:text-primary transition-colors leading-none">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none">
+            <path d="M5 5l14 14M19 5L5 19" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </form>
 
       <!-- Переключатель темы -->
       <div x-data="themeToggle">
@@ -47,7 +59,8 @@
       </a>
 
       <!-- Корзина -->
-      <button class="relative w-8 h-8 flex items-center justify-center text-muted hover:text-primary transition-colors">
+      <button @click="$store.cartUI.openCart()"
+              class="relative w-8 h-8 flex items-center justify-center text-muted hover:text-primary transition-colors">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
             d="M3 3h2l.4 2M7 13h10l4-9H5.4M7 13L5.4 5M7 13l-1.5 6M17 13l1.5 6M9 19a1 1 0 1 0 0 2 1 1 0 0 0 0-2zm8 0a1 1 0 1 0 0 2 1 1 0 0 0 0-2z"/>

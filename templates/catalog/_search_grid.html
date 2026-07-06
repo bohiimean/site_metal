@@ -1,0 +1,93 @@
+<!-- Результаты поиска — htmx-фрагмент (фильтр + пагинация) -->
+
+<!-- Toolbar: счётчик + сортировка -->
+<div class="flex items-center justify-between mb-5 gap-4 flex-wrap">
+  <p class="text-[12px] text-muted">
+    {% if q %}
+      По запросу «<span class="text-primary font-medium">{{ q }}</span>» найдено {{ paginator.count }} товаров
+    {% elif page_obj.object_list %}
+      Показано {{ page_obj.start_index }}–{{ page_obj.end_index }} из {{ paginator.count }} товаров
+    {% endif %}
+  </p>
+  {% if page_obj.object_list %}
+    <select name="sort" form="search-form"
+            class="text-[12px] border border-border rounded px-3 py-1.5 bg-surface text-primary cursor-pointer">
+      <option value="new"        {% if sort == 'new'        %}selected{% endif %}>По новизне</option>
+      <option value="price_asc"  {% if sort == 'price_asc'  %}selected{% endif %}>Цена: по возрастанию</option>
+      <option value="price_desc" {% if sort == 'price_desc' %}selected{% endif %}>Цена: по убыванию</option>
+    </select>
+  {% endif %}
+</div>
+
+{% if page_obj.object_list %}
+
+  <div id="search-product-list" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+    {% for product in page_obj %}
+      {% include "catalog/_product_card.html" %}
+    {% endfor %}
+  </div>
+
+  {% if page_obj.has_next %}
+    <div class="mt-8 text-center">
+      <button
+        hx-get="/search/?page={{ page_obj.next_page_number }}"
+        hx-target="#search-product-list"
+        hx-swap="beforeend"
+        hx-include="#search-form"
+        hx-indicator="#search-load-indicator"
+        class="btn-outline">
+        Показать ещё
+      </button>
+      <span id="search-load-indicator" class="htmx-indicator ml-3 text-[12px] text-muted">Загрузка…</span>
+    </div>
+  {% else %}
+    {% if paginator.num_pages > 1 %}
+      <p class="mt-8 text-center text-[12.5px] text-muted">Вы просмотрели все товары</p>
+    {% endif %}
+  {% endif %}
+
+{% else %}
+
+  <!-- Пустое состояние -->
+  <div class="py-[70px] px-5 bg-surface-alt rounded text-center">
+
+    <div class="w-14 h-14 rounded-full border-2 border-border-strong mx-auto mb-[18px]
+                flex items-center justify-center">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" class="text-muted">
+        <circle cx="10" cy="10" r="6.5" stroke="currentColor" stroke-width="1.8"/>
+        <line x1="15" y1="15" x2="20" y2="20" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+      </svg>
+    </div>
+
+    {% if q %}
+      <p class="text-[15px] font-semibold text-primary mb-2">
+        По запросу «{{ q }}» ничего не найдено
+      </p>
+      <p class="text-[13px] text-muted leading-relaxed mb-[22px]">
+        Попробуйте изменить запрос или сбросить фильтры
+      </p>
+    {% else %}
+      <p class="text-[15px] font-semibold text-primary mb-2">Товары не найдены</p>
+      <p class="text-[13px] text-muted leading-relaxed mb-[22px]">Попробуйте сбросить фильтры</p>
+    {% endif %}
+
+    <a href="/search/" class="btn-accent mb-6">Показать весь каталог</a>
+
+    {% if suggestions %}
+      <p class="text-[10.5px] font-semibold uppercase tracking-[.08em] text-muted mt-6 mb-3">
+        Возможно, вас заинтересует
+      </p>
+      <div class="flex gap-2 justify-center flex-wrap">
+        {% for cat in suggestions %}
+          <a href="/search/?q={{ cat.name|urlencode }}"
+             class="bg-surface border border-border-strong px-4 py-2 text-[12px] font-medium text-primary
+                    rounded-full hover:border-accent hover:text-accent transition-colors">
+            {{ cat.name }}
+          </a>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+  </div>
+
+{% endif %}

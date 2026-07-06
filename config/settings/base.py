@@ -22,6 +22,7 @@ THIRD_PARTY_APPS = [
     'django_filters',
     'imagekit',
     'adminsortable2',
+    'django_ratelimit',
 ]
 
 LOCAL_APPS = [
@@ -98,6 +99,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 TELEGRAM_BOT_TOKEN = config('TELEGRAM_BOT_TOKEN', default='')
 TELEGRAM_CHAT_ID = config('TELEGRAM_CHAT_ID', default='')
+SITE_URL = config('SITE_URL', default='')
 
 YANDEX_CAPTCHA_SERVER_KEY = config('YANDEX_CAPTCHA_SERVER_KEY', default='')
 YANDEX_CAPTCHA_CLIENT_KEY = config('YANDEX_CAPTCHA_CLIENT_KEY', default='')

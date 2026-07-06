@@ -1,0 +1,18 @@
+{% load static %}
+<div class="px-6 py-10 flex flex-col items-center text-center">
+  <div class="w-[64px] h-[64px] rounded-full bg-accent flex items-center justify-center mb-5 text-accent-fg">
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+      <path d="M5 13l4 4L19 7" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+  </div>
+  <p class="text-[18px] font-bold text-primary mb-2">Заявка принята!</p>
+  <p class="text-[13px] text-muted leading-relaxed mb-1.5 max-w-[280px]">
+    Менеджер свяжется с вами в течение 30 минут в рабочее время
+  </p>
+  <p class="text-[12px] font-semibold text-accent mb-6">Заявка № {{ lead.pk }}</p>
+  <button
+    onclick="document.dispatchEvent(new CustomEvent('callback:close'))"
+    class="bg-surface-alt text-primary px-6 py-2.5 text-[12.5px] font-semibold rounded-sm hover:opacity-80 transition-opacity">
+    Закрыть
+  </button>
+</div>

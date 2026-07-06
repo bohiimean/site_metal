@@ -1,0 +1,236 @@
+{% load static %}
+{# Корзина-дровер: управляется $store.cartUI (open/view/orderId) и $store.cart #}
+
+<div
+  x-data
+  x-show="$store.cartUI.open"
+  x-init="$watch('$store.cartUI.open', function(v) { document.body.style.overflow = v ? 'hidden' : ''; })"
+  @keydown.escape.window="$store.cartUI.close()"
+  class="fixed inset-0 z-50"
+  style="display:none">
+
+  <!-- Затемнение фона -->
+  <div
+    class="absolute inset-0 bg-black/40"
+    x-transition:enter="transition-opacity duration-200"
+    x-transition:enter-start="opacity-0"
+    x-transition:enter-end="opacity-100"
+    x-transition:leave="transition-opacity duration-200"
+    x-transition:leave-start="opacity-100"
+    x-transition:leave-end="opacity-0"
+    @click="$store.cartUI.close()">
+  </div>
+
+  <!-- Панель дровера -->
+  <div
+    class="absolute top-0 right-0 bottom-0 w-full sm:w-[420px] bg-surface flex flex-col shadow-[-8px_0_30px_rgba(0,0,0,.12)]"
+    x-transition:enter="transition-transform duration-[250ms] ease"
+    x-transition:enter-start="translate-x-full"
+    x-transition:enter-end="translate-x-0"
+    x-transition:leave="transition-transform duration-[250ms] ease"
+    x-transition:leave-start="translate-x-0"
+    x-transition:leave-end="translate-x-full"
+    @click.stop>
+
+    <!-- ══ ВИД: КОРЗИНА ══ -->
+    <template x-if="$store.cartUI.view === 'cart'">
+      <div class="flex flex-col flex-1 min-h-0">
+
+        <!-- Шапка -->
+        <div class="flex items-center justify-between px-6 py-[22px] border-b border-border shrink-0">
+          <p class="text-[17px] font-bold text-primary"
+             x-text="'Корзина (' + $store.cart.count + ')'"></p>
+          <button @click="$store.cartUI.close()"
+                  class="w-8 h-8 flex items-center justify-center text-muted hover:text-primary transition-colors rounded">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+              <path d="M5 5l14 14M19 5L5 19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Пустая корзина -->
+        <template x-if="$store.cart.count === 0">
+          <div class="flex-1 flex flex-col items-center justify-center px-10 text-center">
+            <div class="w-16 h-16 rounded-full bg-surface-alt flex items-center justify-center mb-[18px]">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" class="text-muted">
+                <path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+                <line x1="3" y1="6" x2="21" y2="6" stroke="currentColor" stroke-width="1.5"/>
+                <path d="M16 10a4 4 0 01-8 0" stroke="currentColor" stroke-width="1.5"/>
+              </svg>
+            </div>
+            <p class="text-[15px] font-semibold text-primary mb-2">Корзина пуста</p>
+            <p class="text-[13px] text-muted leading-relaxed mb-[22px]">
+              Добавьте товары из каталога, чтобы оформить заявку
+            </p>
+            <a href="/catalog/" @click="$store.cartUI.close()" class="btn-accent">
+              Перейти в каталог
+            </a>
+          </div>
+        </template>
+
+        <!-- Список товаров -->
+        <template x-if="$store.cart.count > 0">
+          <div class="flex flex-col flex-1 min-h-0">
+            <div class="flex-1 overflow-y-auto px-6 py-2">
+              <template x-for="item in $store.cart.items" :key="item.sku">
+                <div class="flex gap-3 py-[14px] border-b border-border last:border-0">
+
+                  <!-- Плейсхолдер фото -->
+                  <div class="w-16 h-16 shrink-0 rounded-sm img-placeholder"></div>
+
+                  <div class="flex-1 min-w-0">
+                    <p class="text-[12.5px] font-semibold text-primary leading-snug mb-0.5 line-clamp-2"
+                       x-text="item.name"></p>
+                    <p class="text-[11px] text-muted mb-2.5"
+                       x-text="'Арт. ' + item.sku + (item.unit ? ' · ' + item.unit : '')"></p>
+
+                    <div class="flex items-center justify-between">
+                      <!-- Степпер количества -->
+                      <div class="flex items-center border border-border-strong rounded-sm">
+                        <button @click="$store.cart.setQty(item.sku, item.qty - 1)"
+                                class="w-[26px] h-[26px] flex items-center justify-center text-[15px] font-semibold text-primary hover:text-accent transition-colors">
+                          −
+                        </button>
+                        <span class="w-7 text-center text-[12px] font-semibold text-primary"
+                              x-text="item.qty"></span>
+                        <button @click="$store.cart.setQty(item.sku, item.qty + 1)"
+                                class="w-[26px] h-[26px] flex items-center justify-center text-[15px] font-semibold text-primary hover:text-accent transition-colors">
+                          +
+                        </button>
+                      </div>
+                      <!-- Сумма по позиции -->
+                      <p class="text-[14px] font-bold text-primary"
+                         x-text="(parseFloat(item.price) * item.qty).toLocaleString('ru-RU') + ' ₽'"></p>
+                    </div>
+                  </div>
+
+                  <!-- Удалить -->
+                  <button @click="$store.cart.remove(item.sku)"
+                          class="text-muted/40 hover:text-muted transition-colors self-start mt-1 shrink-0">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+                      <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m2 0v14a2 2 0 01-2 2H8a2 2 0 01-2-2V6"
+                            stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+                    </svg>
+                  </button>
+                </div>
+              </template>
+            </div>
+
+            <!-- Итого + кнопка -->
+            <div class="px-6 py-5 border-t border-border shrink-0">
+              <div class="flex items-center justify-between mb-4">
+                <span class="text-[13px] text-muted">Итого</span>
+                <span class="text-[20px] font-black text-primary"
+                      x-text="$store.cart.total.toLocaleString('ru-RU') + ' ₽'"></span>
+              </div>
+              <button @click="$store.cartUI.view = 'form'" class="btn-accent w-full">
+                Оформить заявку
+              </button>
+            </div>
+          </div>
+        </template>
+
+      </div>
+    </template>
+
+    <!-- ══ ВИД: ФОРМА ЗАЯВКИ ══ -->
+    <template x-if="$store.cartUI.view === 'form'">
+      <div class="flex flex-col flex-1 min-h-0" x-data="cartForm()">
+
+        <!-- Шапка -->
+        <div class="flex items-center gap-2.5 px-6 py-[22px] border-b border-border shrink-0">
+          <button @click="$store.cartUI.view = 'cart'"
+                  class="w-7 h-7 flex items-center justify-center text-primary hover:text-accent transition-colors">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+              <path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+          <p class="text-[17px] font-bold text-primary">Оформление заявки</p>
+        </div>
+
+        <div class="flex-1 overflow-y-auto px-6 py-[22px]">
+
+          <!-- Сводка корзины -->
+          <div class="bg-surface-alt rounded-sm px-[14px] py-3 mb-[22px] text-[12.5px] font-medium text-primary leading-relaxed"
+               x-text="$store.cart.count + ' ' + qtyLabel($store.cart.count) + ' на сумму ' + $store.cart.total.toLocaleString('ru-RU') + ' ₽'">
+          </div>
+
+          <!-- Имя -->
+          <div class="mb-4">
+            <label class="block text-[11.5px] font-semibold text-primary mb-[7px]">Имя</label>
+            <input type="text" x-model="name" placeholder="Как к вам обращаться"
+                   class="w-full border border-border-strong rounded-sm px-[13px] py-[11px] text-[13px] text-primary bg-surface focus:outline-none focus:border-accent transition-colors">
+          </div>
+
+          <!-- Телефон -->
+          <div class="mb-4">
+            <label class="block text-[11.5px] font-semibold text-primary mb-[7px]">
+              Телефон <span class="text-accent">*</span>
+            </label>
+            <input type="tel" x-model="phone" placeholder="+7 (___) ___-__-__"
+                   :class="phoneError ? 'border-red-400 focus:border-red-400' : 'border-border-strong focus:border-accent'"
+                   class="w-full border rounded-sm px-[13px] py-[11px] text-[13px] text-primary bg-surface focus:outline-none transition-colors">
+          </div>
+
+          <!-- Комментарий -->
+          <div class="mb-[18px]">
+            <label class="block text-[11.5px] font-semibold text-primary mb-[7px]">Комментарий</label>
+            <textarea x-model="comment" placeholder="Например: нужна резка в размер"
+                      class="w-full h-[76px] border border-border-strong rounded-sm px-[13px] py-[11px] text-[13px] text-primary bg-surface resize-none focus:outline-none focus:border-accent transition-colors"></textarea>
+          </div>
+
+          <!-- Согласие ПДн -->
+          <div class="flex items-start gap-2.5 cursor-pointer select-none" @click="agree = !agree">
+            <div class="w-4 h-4 shrink-0 border rounded-sm mt-0.5 flex items-center justify-center transition-colors"
+                 :class="agree ? 'bg-accent border-accent text-accent-fg' : 'border-border-strong bg-surface'">
+              <svg x-show="agree" width="10" height="10" viewBox="0 0 12 12" fill="none">
+                <path d="M2 6l3 3 5-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </div>
+            <span class="text-[11.5px] text-muted leading-relaxed">
+              Согласен на обработку персональных данных в соответствии с
+              <a href="/politika-konfidentsialnosti/" class="text-accent underline underline-offset-2"
+                 @click.stop>политикой конфиденциальности</a>
+            </span>
+          </div>
+
+          <!-- Ошибка -->
+          <p x-show="error" x-text="error"
+             class="text-[12px] text-red-500 mt-3 leading-relaxed"></p>
+        </div>
+
+        <!-- Кнопка отправки -->
+        <div class="px-6 py-5 border-t border-border shrink-0">
+          <button @click="submit()"
+                  :disabled="loading"
+                  class="btn-accent w-full disabled:opacity-60 disabled:cursor-not-allowed">
+            <span x-show="!loading">Отправить заявку</span>
+            <span x-show="loading">Отправляем…</span>
+          </button>
+        </div>
+      </div>
+    </template>
+
+    <!-- ══ ВИД: ПОДТВЕРЖДЕНИЕ ══ -->
+    <template x-if="$store.cartUI.view === 'done'">
+      <div class="flex-1 flex flex-col items-center justify-center px-10 text-center">
+        <div class="w-[68px] h-[68px] rounded-full bg-accent flex items-center justify-center mb-[22px] text-accent-fg">
+          <svg width="30" height="30" viewBox="0 0 24 24" fill="none">
+            <path d="M5 13l4 4L19 7" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <p class="text-[19px] font-bold text-primary leading-snug mb-2.5">Заявка отправлена</p>
+        <p class="text-[13.5px] text-muted leading-relaxed mb-1.5 max-w-[280px]">
+          Менеджер свяжется с вами в течение 30 минут в рабочее время
+        </p>
+        <p class="text-[12.5px] font-semibold text-accent mb-[26px]"
+           x-text="'Заявка № ' + $store.cartUI.orderId"></p>
+        <button @click="$store.cartUI.close(); $store.cartUI.view = 'cart'"
+                class="bg-surface-alt text-primary px-[26px] py-3 text-[12.5px] font-semibold rounded-sm hover:opacity-80 transition-opacity">
+          Продолжить покупки
+        </button>
+      </div>
+    </template>
+
+  </div>
+</div>

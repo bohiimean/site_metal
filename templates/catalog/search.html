@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{% if q %}Результаты поиска «{{ q }}»{% else %}Поиск по каталогу{% endif %} — МЕТАПРОФ{% endblock %}
+{% block meta_description %}{% if q %}Найдено {{ paginator.count }} товаров по запросу «{{ q }}» в каталоге МЕТАПРОФ.{% else %}Поиск по каталогу металлопроката МЕТАПРОФ.{% endif %}{% endblock %}
+{% block canonical %}<link rel="canonical" href="{{ request.scheme }}://{{ request.get_host }}/search/{% if q %}?q={{ q|urlencode }}{% endif %}">{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-6 lg:px-12 py-6">
+
+  <!-- Хлебные крошки -->
+  <nav class="text-[11px] text-muted mb-4 flex items-center gap-1.5">
+    <a href="/" class="hover:text-accent transition-colors">Главная</a>
+    <span>/</span>
+    <span class="text-primary">{% if q %}Результаты поиска{% else %}Поиск{% endif %}</span>
+  </nav>
+
+  <!-- Заголовок -->
+  <div class="mb-6">
+    <h1 class="text-[24px] font-bold text-primary mb-1">
+      {% if q %}Результаты поиска{% else %}Все товары{% endif %}
+    </h1>
+    {% if q %}
+      <p class="text-[12.5px] text-muted">
+        По запросу «<span class="text-primary">{{ q }}</span>»
+      </p>
+    {% endif %}
+  </div>
+
+  <div class="flex gap-8">
+
+    <!-- ─── Сайдбар с фильтрами ─── -->
+    <aside class="w-64 shrink-0 hidden lg:block">
+      <form id="search-form"
+            hx-get="/search/"
+            hx-target="#search-grid-section"
+            hx-trigger="change"
+            hx-push-url="true">
+
+        <!-- Скрытый параметр поискового запроса -->
+        <input type="hidden" name="q" value="{{ q }}">
+
+        <!-- Материал -->
+        <div x-data="{open: true}" class="border-b border-border pb-4 mb-4">
+          <button type="button" @click="open = !open"
+                  class="flex items-center justify-between w-full text-[11px] font-semibold uppercase tracking-widest text-muted mb-3">
+            Материал
+            <svg class="w-3 h-3 transition-transform" :class="open ? 'rotate-0' : '-rotate-90'"
+                 fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </button>
+          <div x-show="open" x-collapse class="space-y-2">
+            {% for material in materials %}
+              <label class="flex items-center gap-2 text-[12px] text-primary cursor-pointer hover:text-accent">
+                <input type="checkbox" name="material" value="{{ material.pk }}"
+                       {% if material.pk|stringformat:'s' in selected_materials %}checked{% endif %}
+                       class="accent-[var(--color-accent)] w-3.5 h-3.5 rounded-sm">
+                {{ material.name }}
+              </label>
+            {% endfor %}
+          </div>
+        </div>
+
+        <!-- Наличие -->
+        <div class="border-b border-border pb-4 mb-4">
+          <label class="flex items-center gap-2 text-[12px] text-primary cursor-pointer hover:text-accent">
+            <input type="checkbox" name="in_stock" value="true"
+                   {% if request.GET.in_stock == 'true' %}checked{% endif %}
+                   class="accent-[var(--color-accent)] w-3.5 h-3.5 rounded-sm">
+            <span class="text-[11px] font-semibold uppercase tracking-widest text-muted">Только в наличии</span>
+          </label>
+        </div>
+
+        <!-- Цена -->
+        <div x-data="{open: true}" class="border-b border-border pb-4 mb-4">
+          <button type="button" @click="open = !open"
+                  class="flex items-center justify-between w-full text-[11px] font-semibold uppercase tracking-widest text-muted mb-3">
+            Цена, ₽
+            <svg class="w-3 h-3 transition-transform" :class="open ? 'rotate-0' : '-rotate-90'"
+                 fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </button>
+          <div x-show="open" x-collapse class="flex gap-2">
+            <input type="number" name="price_min" placeholder="от"
+                   value="{{ request.GET.price_min }}"
+                   class="w-full border border-border rounded px-2 py-1.5 text-[12px] bg-surface text-primary">
+            <input type="number" name="price_max" placeholder="до"
+                   value="{{ request.GET.price_max }}"
+                   class="w-full border border-border rounded px-2 py-1.5 text-[12px] bg-surface text-primary">
+          </div>
+        </div>
+
+        <button type="submit"
+                class="w-full btn-accent text-[11px] mb-2">
+          Применить
+        </button>
+        <a href="/search/{% if q %}?q={{ q|urlencode }}{% endif %}"
+           class="block text-center text-[11px] text-muted hover:text-accent transition-colors">
+          Сбросить фильтры
+        </a>
+
+      </form>
+    </aside>
+
+    <!-- ─── Основной контент ─── -->
+    <div class="flex-1 min-w-0">
+      <div id="search-grid-section">
+        {% include "catalog/_search_grid.html" %}
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

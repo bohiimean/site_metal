@@ -171,7 +171,7 @@
           class="btn-accent flex-1 disabled:opacity-50 disabled:cursor-not-allowed">
           В корзину
         </button>
-        <button class="btn-outline flex-1">Связаться с менеджером</button>
+        <button @click="$store.callbackUI.openModal()" class="btn-outline flex-1">Связаться с менеджером</button>
       </div>
 
       <!-- Описание -->

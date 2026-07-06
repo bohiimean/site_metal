@@ -28,7 +28,7 @@
 
   {% block extra_head %}{% endblock %}
 </head>
-<body class="h-full flex flex-col bg-surface text-primary">
+<body class="h-full flex flex-col bg-surface text-primary" x-data>
 
   {% include "partials/_header.html" %}
 
@@ -37,6 +37,9 @@
   </main>
 
   {% include "partials/_footer.html" %}
+
+  {% include "partials/_cart_drawer.html" %}
+  {% include "partials/_callback_modal.html" %}
 
   <!-- Alpine.js -->
   <script>
@@ -87,12 +90,108 @@
         },
       });
 
+      // ─ UI корзины (дровер) ─
+      Alpine.store('cartUI', {
+        open: false,
+        view: 'cart', // 'cart' | 'form' | 'done'
+        orderId: null,
+        openCart() {
+          this.open = true;
+          this.view = 'cart';
+        },
+        close() {
+          this.open = false;
+        },
+      });
+
+      // ─ UI модала обратного звонка ─
+      Alpine.store('callbackUI', {
+        open: false,
+        openModal() { this.open = true; },
+        close() { this.open = false; },
+      });
+
+      // ─ Форма оформления заявки из корзины ─
+      Alpine.data('cartForm', function () {
+        return {
+          name: '',
+          phone: '',
+          comment: '',
+          agree: false,
+          phoneError: false,
+          error: null,
+          loading: false,
+
+          qtyLabel(n) {
+            if (n === 1) return 'товар';
+            if (n >= 2 && n <= 4) return 'товара';
+            return 'товаров';
+          },
+
+          getCsrf() {
+            var m = document.cookie.match(/csrftoken=([^;]+)/);
+            return m ? m[1] : '';
+          },
+
+          async submit() {
+            this.error = null;
+            this.phoneError = false;
+
+            if (!this.phone || this.phone.trim().length < 5) {
+              this.phoneError = true;
+              this.error = 'Укажите номер телефона';
+              return;
+            }
+            if (!this.agree) {
+              this.error = 'Необходимо согласие на обработку персональных данных';
+              return;
+            }
+
+            this.loading = true;
+            try {
+              var resp = await fetch('/leads/submit/', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'X-CSRFToken': this.getCsrf(),
+                },
+                body: JSON.stringify({
+                  name: this.name.trim(),
+                  phone: this.phone.trim(),
+                  comment: this.comment.trim(),
+                  agree: this.agree,
+                  cart_snapshot: this.$store.cart.items,
+                  source: 'cart',
+                }),
+              });
+              var data = await resp.json();
+              if (data.ok) {
+                this.$store.cart.clear();
+                this.$store.cartUI.orderId = data.id;
+                this.$store.cartUI.view = 'done';
+              } else {
+                this.error = data.error || 'Произошла ошибка. Попробуйте ещё раз.';
+              }
+            } catch (e) {
+              this.error = 'Ошибка сети. Попробуйте ещё раз.';
+            } finally {
+              this.loading = false;
+            }
+          },
+        };
+      });
+
     });
   </script>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 
   <!-- htmx -->
   <script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js"></script>
+  <script>
+    document.addEventListener('htmx:afterSwap', function(e) {
+      Alpine.initTree(e.detail.elt);
+    });
+  </script>
 
   {% block extra_js %}{% endblock %}
 </body>

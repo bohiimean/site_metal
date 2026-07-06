@@ -1,6 +1,6 @@
 import json
 from django.core.paginator import Paginator
-from django.db.models import Min, Prefetch
+from django.db.models import Min, Prefetch, Q
 from django.http import Http404
 from django.shortcuts import render
 
@@ -36,6 +36,53 @@ def _product_qs():
             ),
         )
     )
+
+
+def search_view(request):
+    q = request.GET.get('q', '').strip()
+    qs = _product_qs()
+
+    if q:
+        qs = qs.filter(
+            Q(name__icontains=q) |
+            Q(profile_code__icontains=q) |
+            Q(category__name__icontains=q) |
+            Q(variants__material__name__icontains=q)
+        )
+
+    filterset = ProductFilter(request.GET, queryset=qs)
+    products = filterset.qs.distinct()
+
+    sort = request.GET.get('sort', 'new')
+    products = products.order_by(SORT_MAP.get(sort, '-created_at'))
+
+    paginator = Paginator(products, PAGE_SIZE)
+    try:
+        page_num = int(request.GET.get('page', 1))
+    except (ValueError, TypeError):
+        page_num = 1
+    page_obj = paginator.get_page(page_num)
+
+    materials = Material.objects.filter(is_active=True)
+    suggestions = Category.objects.filter(is_active=True, depth=1)[:3]
+    is_htmx = request.headers.get('HX-Request') == 'true'
+
+    ctx = {
+        'q': q,
+        'page_obj': page_obj,
+        'paginator': paginator,
+        'filterset': filterset,
+        'sort': sort,
+        'materials': materials,
+        'suggestions': suggestions,
+        'selected_materials': request.GET.getlist('material'),
+    }
+
+    if is_htmx and page_num > 1:
+        return render(request, 'catalog/_product_cards.html', ctx)
+    if is_htmx:
+        return render(request, 'catalog/_search_grid.html', ctx)
+    return render(request, 'catalog/search.html', ctx)
 
 
 def catalog_index(request):
@@ -149,6 +196,6 @@ def _product_detail(request, product):
     return render(request, 'catalog/product_detail.html', {
         'product':           product,
         'images':            images,
-        'variants_json':     json.dumps(variants_data,  ensure_ascii=False),
-        'combinations_json': json.dumps(combinations,   ensure_ascii=False),
+        'variants_json':     variants_data,
+        'combinations_json': combinations,
     })

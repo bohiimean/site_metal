@@ -54,22 +54,33 @@ class HomeBlock(models.Model):
 
     def get_products(self):
         """Возвращает товары блока согласно типу."""
-        from apps.catalog.models import Product
+        from django.db.models import Min, Prefetch
+        from apps.catalog.models import Product, ProductImage, ProductVariant
+
+        prefetches = [
+            Prefetch(
+                'images',
+                queryset=ProductImage.objects.order_by('sort_order'),
+                to_attr='prefetched_images',
+            ),
+            Prefetch(
+                'variants',
+                queryset=ProductVariant.objects.filter(is_active=True).order_by('price'),
+                to_attr='prefetched_variants',
+            ),
+        ]
+        base = (
+            Product.objects
+            .filter(is_active=True)
+            .annotate(min_price=Min('variants__price'))
+            .select_related('category')
+            .prefetch_related(*prefetches)
+        )
         if self.type == self.TYPE_MANUAL:
-            return (
-                Product.objects
-                .filter(home_block_items__block=self, is_active=True)
-                .order_by('home_block_items__position')
-                .select_related('category')
-                .prefetch_related('images', 'variants')
-            )[:self.limit]
-        else:
-            return (
-                Product.objects
-                .filter(category=self.category, is_active=True)
-                .select_related('category')
-                .prefetch_related('images', 'variants')
-            )[:self.limit]
+            return base.filter(
+                home_block_items__block=self,
+            ).order_by('home_block_items__position')[:self.limit]
+        return base.filter(category=self.category)[:self.limit]
 
 
 class HomeBlockItem(models.Model):

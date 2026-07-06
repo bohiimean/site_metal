@@ -131,8 +131,8 @@
 
   /* Карточка товара */
   .product-card {
-    @apply bg-surface-card border border-border rounded p-[13px]
-           flex flex-col gap-2;
+    @apply bg-surface-card border border-border rounded-sm overflow-hidden
+           flex flex-col;
   }
 
   /* Плейсхолдер изображения (диагональная штриховка, как в дизайне) */
@@ -164,5 +164,18 @@
 
   .chip-active {
     @apply border-accent text-accent-fg bg-accent;
+  }
+}
+
+@layer utilities {
+  .scrollbar-none {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+  [x-cloak] {
+    display: none !important;
   }
 }

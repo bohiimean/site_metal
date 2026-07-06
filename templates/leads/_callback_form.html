@@ -1,0 +1,55 @@
+{% load static %}
+<form hx-post="{% url 'leads:submit_callback' %}"
+      hx-target="#callback-form-area"
+      hx-swap="innerHTML"
+      class="px-6 py-[22px]">
+
+  {% csrf_token %}
+
+  {% if error %}
+    <div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-sm px-4 py-3 mb-5">
+      <p class="text-[12.5px] text-red-600 dark:text-red-400">{{ error }}</p>
+    </div>
+  {% endif %}
+
+  <div class="mb-4">
+    <label class="block text-[11.5px] font-semibold text-primary mb-[7px]">Имя</label>
+    <input type="text" name="name" value="{{ name|default:'' }}" placeholder="Как к вам обращаться"
+           class="w-full border border-border-strong rounded-sm px-[13px] py-[11px] text-[13px] text-primary bg-surface focus:outline-none focus:border-accent transition-colors">
+  </div>
+
+  <div class="mb-4">
+    <label class="block text-[11.5px] font-semibold text-primary mb-[7px]">
+      Телефон <span class="text-accent">*</span>
+    </label>
+    <input type="tel" name="phone" value="{{ phone|default:'' }}" placeholder="+7 (___) ___-__-__"
+           class="w-full border border-border-strong rounded-sm px-[13px] py-[11px] text-[13px] text-primary bg-surface focus:outline-none focus:border-accent transition-colors">
+  </div>
+
+  <div class="mb-[18px]">
+    <label class="block text-[11.5px] font-semibold text-primary mb-[7px]">Комментарий</label>
+    <textarea name="comment" placeholder="Например: уточнить наличие или цену"
+              class="w-full h-[76px] border border-border-strong rounded-sm px-[13px] py-[11px] text-[13px] text-primary bg-surface resize-none focus:outline-none focus:border-accent transition-colors"></textarea>
+  </div>
+
+  <!-- Согласие ПДн -->
+  <div x-data="{agree: false}" class="mb-5">
+    <div class="flex items-start gap-2.5 cursor-pointer select-none" @click="agree = !agree">
+      <div class="w-4 h-4 shrink-0 border rounded-sm mt-0.5 flex items-center justify-center transition-colors"
+           :class="agree ? 'bg-accent border-accent text-accent-fg' : 'border-border-strong bg-surface'">
+        <svg x-show="agree" width="10" height="10" viewBox="0 0 12 12" fill="none">
+          <path d="M2 6l3 3 5-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <span class="text-[11.5px] text-muted leading-relaxed">
+        Согласен на обработку персональных данных в соответствии с
+        <a href="/politika-konfidentsialnosti/" class="text-accent underline underline-offset-2" @click.stop>
+          политикой конфиденциальности
+        </a>
+      </span>
+    </div>
+    <input type="hidden" name="agree" :value="agree ? '1' : ''">
+  </div>
+
+  <button type="submit" class="btn-accent w-full">Отправить заявку</button>
+</form>
