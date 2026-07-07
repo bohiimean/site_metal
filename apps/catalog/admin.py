@@ -4,6 +4,7 @@ from decimal import Decimal, InvalidOperation
 from django.contrib import admin
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render
+from django.urls import reverse
 from django.utils.html import format_html
 from adminsortable2.admin import SortableAdminBase, SortableInlineAdminMixin
 from treebeard.admin import TreeAdmin
@@ -38,24 +39,6 @@ class ProductImageInline(SortableInlineAdminMixin, admin.TabularInline):
     thumb_preview.short_description = 'Превью'
 
 
-class ProductVariantInline(admin.StackedInline):
-    model = ProductVariant
-    extra = 0
-    fields = [
-        ('sku', 'is_active'),
-        ('material', 'steel_grade'),
-        ('finish', 'color'),
-        'image',
-        ('height_mm', 'length_m'),
-        ('price', 'unit'),
-        'in_stock',
-    ]
-    autocomplete_fields = ['material', 'steel_grade', 'finish', 'color']
-
-    class Media:
-        js = ('admin/js/variant_dependent_selects.js',)
-
-
 @admin.register(Product)
 class ProductAdmin(SortableAdminBase, admin.ModelAdmin):
     change_form_template = 'admin/catalog/product/change_form.html'
@@ -66,12 +49,25 @@ class ProductAdmin(SortableAdminBase, admin.ModelAdmin):
     search_fields = ['name', 'slug', 'profile_code']
     prepopulated_fields = {'slug': ('name',)}
     autocomplete_fields = ['category']
-    inlines = [ProductImageInline, ProductVariantInline]
+    inlines = [ProductImageInline]
     fieldsets = [
         (None, {'fields': ['name', 'slug', 'category', 'profile_code', 'is_new', 'is_active']}),
         ('Описание', {'fields': ['description']}),
         ('SEO', {'classes': ['collapse'], 'fields': ['seo_title', 'seo_description']}),
     ]
+
+    # ── Change view: inject generator context ─────────────────────────────────
+
+    def change_view(self, request, object_id, form_url='', extra_context=None):
+        extra_context = extra_context or {}
+        extra_context.update({
+            'gen_materials':    Material.objects.filter(is_active=True).order_by('name'),
+            'gen_finishes':     Finish.objects.filter(is_active=True).order_by('name'),
+            'gen_unit_choices': ProductVariant.UNIT_CHOICES,
+            'gen_stock_choices': ProductVariant.STOCK_CHOICES,
+            'variants_count':   ProductVariant.objects.filter(product_id=object_id).count(),
+        })
+        return super().change_view(request, object_id, form_url, extra_context)
 
     # ── URLs ──────────────────────────────────────────────────────────────────
 
@@ -281,3 +277,67 @@ class ProductAdmin(SortableAdminBase, admin.ModelAdmin):
             sku = f'{base}-{counter}'
             counter += 1
         return sku
+
+
+# ─── Фильтр по товару для списка вариантов ───────────────────────────────────
+
+class ProductListFilter(admin.SimpleListFilter):
+    """Принимает ?product__id=X из ссылки на странице товара.
+    Показывает фильтр в сайдбаре только когда он активен."""
+    title = 'Товар'
+    parameter_name = 'product__id'
+
+    def lookups(self, request, model_admin):
+        pk = request.GET.get(self.parameter_name)
+        if pk:
+            try:
+                p = Product.objects.get(pk=pk)
+                return [(pk, p.name)]
+            except Product.DoesNotExist:
+                pass
+        return []
+
+    def queryset(self, request, queryset):
+        if self.value():
+            return queryset.filter(product_id=self.value())
+        return queryset
+
+
+# ─── ProductVariant standalone admin ─────────────────────────────────────────
+
+@admin.register(ProductVariant)
+class ProductVariantAdmin(admin.ModelAdmin):
+    list_display = [
+        'sku', 'product_link', 'material', 'steel_grade',
+        'finish', 'color', 'length_m', 'price', 'unit', 'in_stock', 'is_active',
+    ]
+    list_display_links = ['sku']
+    list_editable = ['price', 'in_stock', 'is_active']
+    list_filter = [ProductListFilter, 'material', 'finish', 'in_stock', 'is_active']
+    search_fields = ['sku', 'product__name']
+    list_per_page = 50
+    list_max_show_all = 200
+    list_select_related = ['product', 'material', 'steel_grade', 'finish', 'color']
+    raw_id_fields = ['product', 'image']
+    autocomplete_fields = ['material', 'steel_grade', 'finish', 'color']
+    fieldsets = [
+        (None, {'fields': [
+            ('sku', 'is_active'),
+            'product',
+            ('material', 'steel_grade'),
+            ('finish', 'color'),
+            'image',
+            ('height_mm', 'length_m'),
+            ('price', 'unit'),
+            'in_stock',
+        ]}),
+    ]
+
+    def product_link(self, obj):
+        url = reverse('admin:catalog_product_change', args=[obj.product_id])
+        return format_html('<a href="{}">{}</a>', url, obj.product.name)
+    product_link.short_description = 'Товар'
+    product_link.admin_order_field = 'product__name'
+
+    class Media:
+        js = ('admin/js/variant_dependent_selects.js',)

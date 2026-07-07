@@ -1,13 +1,451 @@
 {% extends "admin/change_form.html" %}
+{% load i18n %}
+
+{% block extrahead %}
+{{ block.super }}
+{% if original %}
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+<style>
+  .gen-card {
+    background: var(--body-bg, #fff);
+    border: 1px solid var(--border-color, #ccc);
+    border-radius: 4px;
+    padding: 16px 20px;
+    margin-bottom: 12px;
+  }
+  .gen-row-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+    font-weight: 600;
+    font-size: 13px;
+  }
+  .gen-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+  .gen-field label {
+    display: block;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: #888;
+    margin-bottom: 4px;
+  }
+  .gen-field select,
+  .gen-field input[type=text],
+  .gen-field input[type=number] {
+    width: 100%;
+    padding: 6px 8px;
+    font-size: 13px;
+    border: 1px solid var(--border-color, #ccc);
+    border-radius: 3px;
+    box-sizing: border-box;
+  }
+  .gen-colors { margin-bottom: 14px; }
+  .gen-colors-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: #888;
+    margin-bottom: 8px;
+  }
+  .gen-color-groups { display: flex; flex-wrap: wrap; gap: 16px 24px; }
+  .gen-color-group-title { font-size: 11px; font-weight: 600; color: #aaa; margin-bottom: 5px; }
+  .gen-color-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+    cursor: pointer;
+    font-size: 12px;
+  }
+  .gen-color-item input { margin: 0; cursor: pointer; }
+  .gen-swatch {
+    width: 13px; height: 13px;
+    border-radius: 50%;
+    border: 1px solid rgba(0,0,0,.15);
+    flex-shrink: 0;
+    display: inline-block;
+  }
+  .gen-lengths { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .gen-length-input { width: 70px !important; }
+  .gen-btn-sm { padding: 3px 8px; font-size: 12px; cursor: pointer; }
+  .gen-result {
+    margin-top: 16px;
+    padding: 12px 16px;
+    border: 1px solid var(--border-color, #ccc);
+    border-radius: 4px;
+    background: #f9f9f9;
+  }
+  .gen-result-ok  { color: #2e7d32; }
+  .gen-result-err { color: #c62828; }
+  .gen-result-sku { font-family: monospace; font-size: 11px; color: #555; margin-left: 16px; }
+  .gen-no-colors  { font-size: 12px; color: #aaa; font-style: italic; }
+</style>
+{% endif %}
+{% endblock %}
 
 {% block object-tools-items %}
-  {% if original %}
-    <li>
-      <a href="{% url 'admin:catalog_product_generate_variants' original.pk %}"
-         class="button">
-        ⚡ Генератор вариантов
+{{ block.super }}
+{% endblock %}
+
+{% block after_related_objects %}
+{{ block.super }}
+{% if original %}
+<div style="margin-top: 24px;">
+
+  {# ── Шапка: счётчик + ссылка на список ── #}
+  <div class="module" style="padding: 0; overflow: hidden; margin-bottom: 12px;">
+    <h2 style="margin: 0; padding: 9px 14px; font-size: 13px;
+               display: flex; align-items: center; justify-content: space-between;">
+      <span>
+        Варианты товара
+        <span style="font-weight: normal; color: #888; margin-left: 6px;">{{ variants_count }} шт.</span>
+      </span>
+      <a href="{% url 'admin:catalog_productvariant_changelist' %}?product__id={{ original.pk }}"
+         class="button" style="font-size: 11px; padding: 4px 10px; margin: 0;">
+        Открыть список &rarr;
       </a>
-    </li>
-  {% endif %}
-  {{ block.super }}
+    </h2>
+  </div>
+
+  {# ── Генератор вариантов ── #}
+  <div class="module" style="padding: 0; overflow: hidden;">
+    <h2 style="margin: 0; padding: 9px 14px; font-size: 13px;">⚡ Генератор вариантов</h2>
+    <div style="padding: 14px 16px;">
+      <div x-data="variantGenerator('{% url "admin:catalog_product_generate_variants" original.pk %}')"
+           x-init="init()">
+
+        {# СТРОКИ #}
+        <template x-for="(row, idx) in rows" :key="idx">
+          <div class="gen-card">
+
+            <div class="gen-row-header">
+              <span x-text="'Строка ' + (idx + 1)"></span>
+              <button type="button" class="button gen-btn-sm"
+                      style="background:#e53935;border-color:#e53935;"
+                      x-show="rows.length > 1"
+                      @click="removeRow(idx)">✕ Удалить</button>
+            </div>
+
+            {# Материал / Марка / Обработка #}
+            <div class="gen-grid">
+              <div class="gen-field">
+                <label>Материал *</label>
+                <select x-model="row.material_id" @change="onMaterialChange(row)">
+                  <option value="">— выберите —</option>
+                  {% for m in gen_materials %}
+                    <option value="{{ m.pk }}">{{ m.name }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="gen-field">
+                <label>Марка стали</label>
+                <select x-model="row.steel_grade_id"
+                        :disabled="!row.material_id || !row.steel_grades.length">
+                  <option value="">— нет —</option>
+                  <template x-for="g in row.steel_grades" :key="g.id">
+                    <option :value="g.id" x-text="g.name"></option>
+                  </template>
+                </select>
+              </div>
+              <div class="gen-field">
+                <label>Обработка</label>
+                <select x-model="row.finish_id" @change="onFinishChange(row)">
+                  <option value="">— без обработки —</option>
+                  {% for f in gen_finishes %}
+                    <option value="{{ f.pk }}">{{ f.name }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+            </div>
+
+            {# Цвета #}
+            <div class="gen-colors">
+              <div class="gen-colors-label">Цвета</div>
+
+              <template x-if="!row.finish_id">
+                <p class="gen-no-colors">Выберите обработку — цвета загрузятся автоматически</p>
+              </template>
+              <template x-if="row.finish_id && row.loading_colors">
+                <p class="gen-no-colors">Загружаю цвета…</p>
+              </template>
+              <template x-if="row.finish_id && !row.loading_colors && !row.colors.length">
+                <p class="gen-no-colors">Для этой обработки цвета не настроены (вариант будет без цвета)</p>
+              </template>
+              <template x-if="row.finish_id && !row.loading_colors && row.colors.length">
+                <div>
+                  <div style="margin-bottom:8px;display:flex;gap:8px;">
+                    <button type="button" class="button gen-btn-sm"
+                            @click="selectAllColors(row)">Выбрать все</button>
+                    <button type="button" class="button gen-btn-sm"
+                            style="background:#888;border-color:#888;"
+                            @click="row.color_ids = []">Сбросить</button>
+                  </div>
+                  <div class="gen-color-groups">
+                    <template x-for="group in groupedColors(row)" :key="group.label">
+                      <div>
+                        <p class="gen-color-group-title" x-text="group.label"></p>
+                        <template x-for="c in group.items" :key="c.id">
+                          <label class="gen-color-item">
+                            <input type="checkbox"
+                                   :value="c.id"
+                                   :checked="row.color_ids.includes(c.id)"
+                                   @change="toggleColor(row, c.id)">
+                            <span class="gen-swatch"
+                                  :style="'background:' + (c.hex || '#cccccc')"></span>
+                            <span x-text="c.name + (c.ral ? ' (' + c.ral + ')' : '')"></span>
+                          </label>
+                        </template>
+                      </div>
+                    </template>
+                  </div>
+                </div>
+              </template>
+            </div>
+
+            {# Длины #}
+            <div class="gen-field" style="margin-bottom:14px;">
+              <label>
+                Длины, м
+                <span style="font-weight:400;text-transform:none;">
+                  (оставьте пустым для штучных/листовых)
+                </span>
+              </label>
+              <div class="gen-lengths">
+                <template x-for="(len, li) in row.lengths" :key="li">
+                  <div style="display:flex;align-items:center;gap:4px;">
+                    <input type="number" step="0.1" min="0.1"
+                           class="gen-length-input"
+                           :value="len"
+                           @input="row.lengths[li] = $event.target.value">
+                    <button type="button" class="button gen-btn-sm"
+                            style="background:#888;border-color:#888;"
+                            x-show="row.lengths.length > 1"
+                            @click="removeLength(row, li)">✕</button>
+                  </div>
+                </template>
+                <button type="button" class="button gen-btn-sm"
+                        @click="addLength(row)">+ Длина</button>
+                <button type="button" class="button gen-btn-sm"
+                        style="background:#888;border-color:#888;"
+                        x-show="row.lengths.length > 0"
+                        @click="row.lengths = []"
+                        title="Убрать все длины (для штучных/листовых)">× Без длины</button>
+              </div>
+            </div>
+
+            {# Цена / Единица / Наличие / Высота / SKU-префикс #}
+            <div class="gen-grid">
+              <div class="gen-field">
+                <label>Цена, ₽ *</label>
+                <input type="number" step="0.01" min="0" x-model="row.price">
+              </div>
+              <div class="gen-field">
+                <label>Единица цены</label>
+                <select x-model="row.unit">
+                  {% for val, label in gen_unit_choices %}
+                    <option value="{{ val }}">{{ label }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="gen-field">
+                <label>Наличие</label>
+                <select x-model="row.in_stock">
+                  {% for val, label in gen_stock_choices %}
+                    <option value="{{ val }}">{{ label }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="gen-field">
+                <label>Высота, мм</label>
+                <input type="number" step="0.1" min="0" x-model="row.height_mm"
+                       placeholder="необязательно">
+              </div>
+              <div class="gen-field" style="grid-column:span 2;">
+                <label>
+                  SKU-префикс
+                  <span style="font-weight:400;text-transform:none;">
+                    (необязательно — иначе генерируется авто)
+                  </span>
+                </label>
+                <input type="text" x-model="row.sku_prefix"
+                       placeholder="напр. GR30-NZH или оставьте пустым">
+              </div>
+            </div>
+
+          </div>
+        </template>
+
+        {# Управление строками #}
+        <div style="margin-bottom:20px;display:flex;gap:10px;">
+          <button type="button" class="button" @click="addRow()">+ Добавить строку</button>
+        </div>
+
+        {# Кнопка генерации #}
+        <div>
+          <button type="button" class="button default"
+                  style="font-size:14px;padding:10px 28px;"
+                  :disabled="loading"
+                  @click="generate()">
+            <span x-show="!loading">⚡ Сгенерировать варианты</span>
+            <span x-show="loading">Создаю…</span>
+          </button>
+        </div>
+
+        {# Результат #}
+        <template x-if="results">
+          <div class="gen-result">
+            <p class="gen-result-ok"
+               style="font-size:14px;font-weight:600;margin-bottom:8px;"
+               x-show="results.created > 0"
+               x-text="'✓ Создано вариантов: ' + results.created"></p>
+            <p style="color:#555;margin-bottom:8px;"
+               x-show="results.skipped > 0"
+               x-text="'Пропущено (уже существуют или ошибка): ' + results.skipped"></p>
+
+            <template x-if="results.created_list && results.created_list.length">
+              <details style="margin-top:8px;">
+                <summary style="cursor:pointer;font-size:12px;color:#555;">Созданные SKU</summary>
+                <template x-for="sku in results.created_list" :key="sku">
+                  <div class="gen-result-sku" x-text="sku"></div>
+                </template>
+              </details>
+            </template>
+
+            <template x-if="results.errors && results.errors.length">
+              <div style="margin-top:10px;">
+                <p class="gen-result-err" style="font-weight:600;">Ошибки:</p>
+                <template x-for="err in results.errors" :key="err">
+                  <p class="gen-result-err"
+                     style="font-size:12px;margin-left:12px;"
+                     x-text="err"></p>
+                </template>
+              </div>
+            </template>
+
+            <template x-if="results.created > 0">
+              <div style="margin-top:14px;">
+                <a href="{% url 'admin:catalog_productvariant_changelist' %}?product__id={{ original.pk }}"
+                   class="button default">Открыть список вариантов &rarr;</a>
+              </div>
+            </template>
+          </div>
+        </template>
+
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const COLOR_GROUP_LABELS = {
+  white: 'Белые', gray: 'Серые', black: 'Чёрные', brown: 'Коричневые',
+  blue: 'Синие', green: 'Зелёные', metallic: 'Металлик', other: 'Другие', '': 'Прочие',
+};
+const COLOR_GROUP_ORDER = ['white','gray','black','brown','blue','green','metallic','other',''];
+
+function variantGenerator(genUrl) {
+  return {
+    genUrl: genUrl,
+    rows: [],
+    loading: false,
+    results: null,
+
+    init() { this.addRow(); },
+
+    newRow() {
+      return {
+        material_id: '', steel_grade_id: '', finish_id: '',
+        color_ids: [], lengths: ['3'], price: '', unit: 'm',
+        in_stock: 'in_stock', height_mm: '', sku_prefix: '',
+        steel_grades: [], colors: [],
+        loading_grades: false, loading_colors: false,
+      };
+    },
+
+    addRow()             { this.rows.push(this.newRow()); },
+    removeRow(i)         { this.rows.splice(i, 1); },
+    addLength(row)       { row.lengths.push(''); },
+    removeLength(row, i) { row.lengths.splice(i, 1); },
+
+    toggleColor(row, id) {
+      const idx = row.color_ids.indexOf(id);
+      if (idx === -1) row.color_ids.push(id);
+      else row.color_ids.splice(idx, 1);
+    },
+    selectAllColors(row) { row.color_ids = row.colors.map(c => c.id); },
+
+    groupedColors(row) {
+      const map = {};
+      for (const c of row.colors) {
+        const k = c.group || '';
+        if (!map[k]) map[k] = { label: COLOR_GROUP_LABELS[k] || k, items: [] };
+        map[k].items.push(c);
+      }
+      return COLOR_GROUP_ORDER.filter(k => map[k]).map(k => map[k]);
+    },
+
+    async onMaterialChange(row) {
+      row.steel_grade_id = ''; row.steel_grades = [];
+      if (!row.material_id) return;
+      row.loading_grades = true;
+      try {
+        const r = await fetch(`/admin/catalog/product/api/steel-grades/?material=${row.material_id}`);
+        row.steel_grades = await r.json();
+      } finally { row.loading_grades = false; }
+    },
+
+    async onFinishChange(row) {
+      row.color_ids = []; row.colors = [];
+      if (!row.finish_id) return;
+      row.loading_colors = true;
+      try {
+        const r = await fetch(`/admin/catalog/product/api/colors/?finish=${row.finish_id}`);
+        row.colors = await r.json();
+      } finally { row.loading_colors = false; }
+    },
+
+    getCsrf() {
+      const m = document.cookie.match(/csrftoken=([^;]+)/);
+      return m ? m[1] : '';
+    },
+
+    async generate() {
+      for (let i = 0; i < this.rows.length; i++) {
+        if (!this.rows[i].material_id) {
+          alert(`Строка ${i + 1}: выберите материал`); return;
+        }
+        if (!this.rows[i].price || parseFloat(this.rows[i].price) <= 0) {
+          alert(`Строка ${i + 1}: укажите корректную цену`); return;
+        }
+      }
+      this.loading = true; this.results = null;
+      try {
+        const resp = await fetch(this.genUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': this.getCsrf(),
+          },
+          body: JSON.stringify({ rows: this.rows }),
+        });
+        this.results = await resp.json();
+      } catch (e) {
+        this.results = { created: 0, skipped: 0, errors: ['Ошибка сети: ' + e] };
+      } finally {
+        this.loading = false;
+      }
+    },
+  };
+}
+</script>
+{% endif %}
 {% endblock %}
