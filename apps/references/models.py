@@ -34,8 +34,22 @@ class SteelGrade(models.Model):
 
 
 class Finish(models.Model):
-    name = models.CharField('Название', max_length=100)
-    slug = models.SlugField('Slug', max_length=100, unique=True)
+    COLOR_UI_SWATCHES = 'swatches'
+    COLOR_UI_RAL      = 'ral_palette'
+    COLOR_UI_CUSTOM   = 'custom_request'
+    COLOR_UI_CHOICES  = [
+        ('swatches',       'Свотчи (≤10 цветов)'),
+        ('ral_palette',    'Каталог RAL с поиском'),
+        ('custom_request', '5 популярных + свой цвет'),
+    ]
+
+    name     = models.CharField('Название', max_length=100)
+    slug     = models.SlugField('Slug', max_length=100, unique=True)
+    color_ui = models.CharField(
+        'Интерфейс выбора цвета', max_length=20,
+        choices=COLOR_UI_CHOICES, default='swatches',
+        help_text='Шлифованный/Полированный → «Каталог RAL». Под покраску → «5 популярных + свой цвет».',
+    )
     is_active = models.BooleanField('Активна', default=True)
 
     class Meta:
@@ -48,9 +62,24 @@ class Finish(models.Model):
 
 
 class Color(models.Model):
-    name = models.CharField('Название', max_length=100)
-    hex_code = models.CharField('HEX-код', max_length=7, blank=True)
-    is_active = models.BooleanField('Активен', default=True)
+    COLOR_GROUP_CHOICES = [
+        ('white',    'Белые'),
+        ('gray',     'Серые'),
+        ('black',    'Чёрные'),
+        ('brown',    'Коричневые'),
+        ('blue',     'Синие'),
+        ('green',    'Зелёные'),
+        ('metallic', 'Металлик'),
+        ('other',    'Другие'),
+    ]
+
+    name        = models.CharField('Название', max_length=100)
+    hex_code    = models.CharField('HEX-код', max_length=7, blank=True)
+    ral_code    = models.CharField('RAL-код', max_length=20, blank=True,
+                                   help_text='Например: RAL 9010')
+    color_group = models.CharField('Группа цвета', max_length=20,
+                                   choices=COLOR_GROUP_CHOICES, blank=True)
+    is_active   = models.BooleanField('Активен', default=True)
 
     class Meta:
         verbose_name = 'Цвет'

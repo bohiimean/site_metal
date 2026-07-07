@@ -29,8 +29,8 @@ class FinishColorInline(admin.TabularInline):
 
 @admin.register(Finish)
 class FinishAdmin(admin.ModelAdmin):
-    list_display = ['name', 'slug', 'is_active']
-    list_editable = ['is_active']
+    list_display  = ['name', 'slug', 'color_ui', 'is_active']
+    list_editable = ['color_ui', 'is_active']
     prepopulated_fields = {'slug': ('name',)}
     search_fields = ['name']
     inlines = [FinishColorInline]
@@ -38,6 +38,7 @@ class FinishAdmin(admin.ModelAdmin):
 
 @admin.register(Color)
 class ColorAdmin(admin.ModelAdmin):
-    list_display = ['name', 'hex_code', 'is_active']
-    list_editable = ['is_active']
-    search_fields = ['name']
+    list_display  = ['name', 'hex_code', 'ral_code', 'color_group', 'is_active']
+    list_editable = ['color_group', 'is_active']
+    list_filter   = ['color_group']
+    search_fields = ['name', 'ral_code']
