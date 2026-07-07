@@ -117,6 +117,27 @@
         </div>
       </template>
 
+      <!-- Обработка (pill-таб) — только когда обработок больше одной -->
+      <template x-if="uniqueFinishes.length > 1">
+        <div>
+          <p class="text-[12px] font-semibold text-primary mb-2.5">
+            Обработка: <span class="font-normal text-muted" x-text="current ? (current.finish_name || '—') : ''"></span>
+          </p>
+          <div class="flex flex-wrap gap-1 bg-surface-alt p-1 rounded-md">
+            <template x-for="fin in uniqueFinishes" :key="fin.id">
+              <button
+                @click="selectFinish(fin.id)"
+                :class="sel.finish_id === fin.id
+                  ? 'bg-accent text-accent-fg font-bold'
+                  : 'text-primary font-medium hover:text-accent'"
+                class="flex-1 text-center py-2.5 text-[12px] rounded-sm transition-all whitespace-nowrap"
+                x-text="fin.name">
+              </button>
+            </template>
+          </div>
+        </div>
+      </template>
+
       <!-- Подпись «Не окрашивается» — только когда есть несколько материалов,
            но у текущего выбранного нет ни одного цветного варианта -->
       <template x-if="uniqueMaterials.length > 1 && !currentMaterialHasColors">
@@ -373,6 +394,15 @@ function productVariants() {
       this.customSubmitted = false;
       this._autoSelect();
     },
+    selectFinish(id) {
+      this.sel.finish_id = id;
+      this.sel.color_id  = null;
+      this.sel.length_m  = null;
+      this.ralOpen = false;
+      this.customOpen = false;
+      this.customSubmitted = false;
+      this._autoSelect();
+    },
     selectColor(id) {
       this.sel.color_id = id;
       this.ralOpen = false;
@@ -417,6 +447,10 @@ function productVariants() {
     },
 
     get colorUiMode() {
+      if (this.sel.finish_id) {
+        const v = this.variants.find(v => v.finish_id === this.sel.finish_id);
+        if (v) return v.finish_color_ui || 'swatches';
+      }
       return this.current?.finish_color_ui || 'swatches';
     },
 
@@ -424,6 +458,17 @@ function productVariants() {
       return this.variants.some(v =>
         v.material_id === this.sel.material_id && v.color_id !== null
       );
+    },
+
+    get uniqueFinishes() {
+      const seen = {};
+      return this.variants
+        .filter(v =>
+          v.finish_id &&
+          (this.sel.material_id == null || v.material_id === this.sel.material_id) &&
+          !seen[v.finish_id] && (seen[v.finish_id] = true)
+        )
+        .map(v => ({ id: v.finish_id, name: v.finish_name, color_ui: v.finish_color_ui }));
     },
 
     get uniqueMaterials() {
@@ -436,7 +481,12 @@ function productVariants() {
     get uniqueColors() {
       const seen = {};
       return this.variants
-        .filter(v => v.color_id && !seen[v.color_id] && (seen[v.color_id] = true))
+        .filter(v =>
+          v.color_id &&
+          (this.sel.material_id == null || v.material_id === this.sel.material_id) &&
+          (this.sel.finish_id   == null || v.finish_id   === this.sel.finish_id)   &&
+          !seen[v.color_id] && (seen[v.color_id] = true)
+        )
         .map(v => ({
           id:       v.color_id,
           name:     v.color_name,

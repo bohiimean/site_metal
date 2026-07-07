@@ -1,0 +1,13 @@
+{% extends "admin/change_form.html" %}
+
+{% block object-tools-items %}
+  {% if original %}
+    <li>
+      <a href="{% url 'admin:catalog_product_generate_variants' original.pk %}"
+         class="button">
+        ⚡ Генератор вариантов
+      </a>
+    </li>
+  {% endif %}
+  {{ block.super }}
+{% endblock %}
