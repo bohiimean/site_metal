@@ -319,7 +319,9 @@ class ProductVariantAdmin(admin.ModelAdmin):
     list_max_show_all = 200
     list_select_related = ['product', 'material', 'steel_grade', 'finish', 'color']
     raw_id_fields = ['product', 'image']
-    autocomplete_fields = ['material', 'steel_grade', 'finish', 'color']
+    # autocomplete_fields (Select2) не совместим с зависимыми селектами:
+    # ручная подмена options через JS не обновляет состояние Select2.
+    # Справочники (материал/марка/обработка/цвет) короткие — обычный select работает нормально.
     fieldsets = [
         (None, {'fields': [
             ('sku', 'is_active'),

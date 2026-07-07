@@ -54,28 +54,8 @@ class HomeBlock(models.Model):
 
     def get_products(self):
         """Возвращает товары блока согласно типу."""
-        from django.db.models import Min, Prefetch
-        from apps.catalog.models import Product, ProductImage, ProductVariant
-
-        prefetches = [
-            Prefetch(
-                'images',
-                queryset=ProductImage.objects.order_by('sort_order'),
-                to_attr='prefetched_images',
-            ),
-            Prefetch(
-                'variants',
-                queryset=ProductVariant.objects.filter(is_active=True).order_by('price'),
-                to_attr='prefetched_variants',
-            ),
-        ]
-        base = (
-            Product.objects
-            .filter(is_active=True)
-            .annotate(min_price=Min('variants__price'))
-            .select_related('category')
-            .prefetch_related(*prefetches)
-        )
+        from apps.catalog.models import Product
+        base = Product.objects.for_cards()
         if self.type == self.TYPE_MANUAL:
             return base.filter(
                 home_block_items__block=self,

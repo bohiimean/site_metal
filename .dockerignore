@@ -1,0 +1,36 @@
+# Секреты — никогда в образ
+.env
+.env.*
+!.env.example
+
+# VCS
+.git
+.gitignore
+.github
+
+# Локальный dev-мусор
+.venv
+venv
+.vscode
+.idea
+.DS_Store
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+*.egg-info
+
+# Артефакты, которые собираются внутри образа или монтируются volume
+media
+staticfiles
+static/css/output.css
+
+# CI/docs
+CLAUDE.md
+README.md
+*.md
+docs
+tests
+.pytest_cache
+.coverage
+htmlcov

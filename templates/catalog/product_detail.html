@@ -358,10 +358,18 @@ function productVariants() {
 
       const sku = new URLSearchParams(location.search).get('sku');
       const v   = sku ? this.variants.find(v => v.sku === sku) : null;
-      this._pickVariant(v || this.variants[0]);
+      // При первичной инициализации — replaceState, чтобы не создавать лишнюю запись
+      this._pickVariant(v || this.variants[0], /*replace=*/true);
+
+      // Реакция на back/forward — переставить вариант по sku из URL
+      window.addEventListener('popstate', () => {
+        const s = new URLSearchParams(location.search).get('sku');
+        const found = s ? this.variants.find(x => x.sku === s) : null;
+        if (found) this._pickVariant(found, /*replace=*/true);
+      });
     },
 
-    _pickVariant(v) {
+    _pickVariant(v, replace = false) {
       if (!v) return;
       this.sel = {
         material_id:    v.material_id,
@@ -372,19 +380,28 @@ function productVariants() {
       };
       this.current    = v;
       this.activeThumb = v.image_url;
-      history.replaceState({}, '', '?sku=' + encodeURIComponent(v.sku));
+      const url = '?sku=' + encodeURIComponent(v.sku);
+      if (replace) history.replaceState({}, '', url);
+      else         history.pushState({}, '', url);
     },
 
     _autoSelect() {
+      // Ищем вариант, максимально совпадающий с sel.
+      // Если точного матча нет — постепенно ослабляем ограничения снизу вверх
+      // (сначала отбрасываем length, потом color, потом finish, потом steel_grade).
       const s = this.sel;
-      const match = this.variants.find(v =>
-        (s.material_id    == null || v.material_id    === s.material_id)    &&
-        (s.steel_grade_id == null || v.steel_grade_id === s.steel_grade_id) &&
-        (s.finish_id      == null || v.finish_id      === s.finish_id)      &&
-        (s.color_id       == null || v.color_id       === s.color_id)       &&
-        (s.length_m       == null || v.length_m       === s.length_m)
-      );
-      if (match) this._pickVariant(match);
+      const constraints = [
+        v => s.material_id    == null || v.material_id    === s.material_id,
+        v => s.steel_grade_id == null || v.steel_grade_id === s.steel_grade_id,
+        v => s.finish_id      == null || v.finish_id      === s.finish_id,
+        v => s.color_id       == null || v.color_id       === s.color_id,
+        v => s.length_m       == null || v.length_m       === s.length_m,
+      ];
+      for (let drop = 0; drop <= constraints.length; drop++) {
+        const active = constraints.slice(0, constraints.length - drop);
+        const match = this.variants.find(v => active.every(fn => fn(v)));
+        if (match) { this._pickVariant(match); return; }
+      }
     },
 
     selectMaterial(id) {
@@ -419,10 +436,17 @@ function productVariants() {
 
     submitCustomColor() {
       if (!this.customText.trim()) return;
-      this.customLastText = this.customText.trim();
+      const text = this.customText.trim();
+      const productLine = '{{ product.name|escapejs }}'
+        + (this.current ? ' (арт. ' + this.current.sku + ')' : '');
+      const prefill = 'Запрос цвета под покраску: «' + text + '».\nТовар: ' + productLine;
+      this.customLastText = text;
       this.customSubmitted = true;
       this.customOpen = false;
       this.customText = '';
+      // Открываем модалку обратного звонка с предзаполненным комментарием —
+      // так менеджер получит телефон и контекст запроса
+      this.$store.callbackUI.openModal(prefill);
     },
 
     swatchStyle(hex, active) {

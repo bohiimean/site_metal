@@ -29,7 +29,8 @@
   <div class="mb-[18px]">
     <label class="block text-[11.5px] font-semibold text-primary mb-[7px]">Комментарий</label>
     <textarea name="comment" placeholder="Например: уточнить наличие или цену"
-              class="w-full h-[76px] border border-border-strong rounded-sm px-[13px] py-[11px] text-[13px] text-primary bg-surface resize-none focus:outline-none focus:border-accent transition-colors"></textarea>
+              x-init="if (!$el.value && $store.callbackUI.prefillComment) $el.value = $store.callbackUI.prefillComment"
+              class="w-full h-[76px] border border-border-strong rounded-sm px-[13px] py-[11px] text-[13px] text-primary bg-surface resize-none focus:outline-none focus:border-accent transition-colors">{{ comment|default:'' }}</textarea>
   </div>
 
   <!-- Согласие ПДн -->

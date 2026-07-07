@@ -27,6 +27,36 @@ class Category(MP_Node):
     def get_full_slug_path(self):
         return '/'.join(a.slug for a in self.get_ancestors()) + f'/{self.slug}/'
 
+    def clean(self):
+        super().clean()
+        if self.slug and Product.objects.filter(slug=self.slug).exists():
+            raise ValidationError({
+                'slug': 'Такой slug уже используется товаром. Выберите другой.',
+            })
+
+
+class ProductQuerySet(models.QuerySet):
+    def for_cards(self):
+        """QuerySet для сетки карточек: с min_price, первым фото и первым вариантом."""
+        from django.db.models import Min, Prefetch
+        return (
+            self.filter(is_active=True)
+            .annotate(min_price=Min('variants__price'))
+            .select_related('category')
+            .prefetch_related(
+                Prefetch(
+                    'images',
+                    queryset=ProductImage.objects.order_by('sort_order'),
+                    to_attr='prefetched_images',
+                ),
+                Prefetch(
+                    'variants',
+                    queryset=ProductVariant.objects.filter(is_active=True).order_by('price'),
+                    to_attr='prefetched_variants',
+                ),
+            )
+        )
+
 
 class Product(models.Model):
     name = models.CharField('Название', max_length=300)
@@ -45,6 +75,8 @@ class Product(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    objects = ProductQuerySet.as_manager()
+
     class Meta:
         verbose_name = 'Товар'
         verbose_name_plural = 'Товары'
@@ -55,7 +87,14 @@ class Product(models.Model):
 
     def get_absolute_url(self):
         from django.urls import reverse
-        return reverse('catalog:product_detail', kwargs={'slug': self.slug})
+        return reverse('catalog:detail', kwargs={'slug': self.slug})
+
+    def clean(self):
+        super().clean()
+        if self.slug and Category.objects.filter(slug=self.slug).exists():
+            raise ValidationError({
+                'slug': 'Такой slug уже используется категорией. Выберите другой.',
+            })
 
     def get_min_price(self):
         result = self.variants.filter(is_active=True).order_by('price').first()
@@ -220,7 +259,7 @@ class ProductVariant(models.Model):
                 })
 
     def save(self, *args, **kwargs):
-        self.clean()
+        self.full_clean()
         super().save(*args, **kwargs)
 
     def get_image(self):

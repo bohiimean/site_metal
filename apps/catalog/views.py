@@ -1,12 +1,11 @@
-import json
 from django.core.paginator import Paginator
-from django.db.models import Min, Prefetch, Q
+from django.db.models import Q
 from django.http import Http404
 from django.shortcuts import render
 
 from apps.references.models import Material
 from .filters import ProductFilter
-from .models import Category, Product, ProductImage, ProductVariant
+from .models import Category, Product
 
 PAGE_SIZE = 9
 SORT_MAP = {
@@ -18,24 +17,7 @@ SORT_MAP = {
 
 def _product_qs():
     """Базовый QuerySet товаров с нужными join-ами."""
-    return (
-        Product.objects
-        .filter(is_active=True)
-        .annotate(min_price=Min('variants__price'))
-        .select_related('category')
-        .prefetch_related(
-            Prefetch(
-                'images',
-                queryset=ProductImage.objects.order_by('sort_order'),
-                to_attr='prefetched_images',
-            ),
-            Prefetch(
-                'variants',
-                queryset=ProductVariant.objects.filter(is_active=True).order_by('price'),
-                to_attr='prefetched_variants',
-            ),
-        )
-    )
+    return Product.objects.for_cards()
 
 
 def search_view(request):
@@ -115,7 +97,10 @@ def _render_catalog(request, category):
     products = products.order_by(SORT_MAP.get(sort, '-created_at'))
 
     paginator = Paginator(products, PAGE_SIZE)
-    page_num = int(request.GET.get('page', 1))
+    try:
+        page_num = int(request.GET.get('page', 1))
+    except (ValueError, TypeError):
+        page_num = 1
     page_obj = paginator.get_page(page_num)
 
     materials = Material.objects.filter(is_active=True)

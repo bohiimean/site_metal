@@ -1,5 +1,6 @@
 from django.contrib import admin
-from django.utils.html import format_html
+from django.utils.html import format_html, format_html_join
+from django.utils.safestring import mark_safe
 from .models import Lead
 
 
@@ -50,13 +51,31 @@ class LeadAdmin(admin.ModelAdmin):
     def cart_snapshot_display(self, obj):
         if not obj.cart_snapshot:
             return '— (заявка на звонок)'
-        rows = []
-        for item in obj.cart_snapshot:
-            rows.append(
-                f"{item.get('name', '?')} &nbsp;·&nbsp; "
-                f"арт. {item.get('sku', '?')} &nbsp;·&nbsp; "
-                f"×{item.get('qty', 1)} &nbsp;·&nbsp; "
-                f"{item.get('price', '?')} ₽/{item.get('unit', '')}"
+
+        def _row(item):
+            base = format_html(
+                '{} &nbsp;·&nbsp; арт. {} &nbsp;·&nbsp; ×{} &nbsp;·&nbsp; {} ₽/{}',
+                item.get('name', '?'),
+                item.get('sku', '?'),
+                item.get('qty', 1),
+                item.get('price') if item.get('price') is not None else '?',
+                item.get('unit', ''),
             )
-        return format_html('<br>'.join(rows))
+            extras = []
+            if item.get('client_saw_price'):
+                extras.append(format_html(
+                    '<span style="color:#c62828">клиент видел {} ₽</span>',
+                    item['client_saw_price'],
+                ))
+            if item.get('note'):
+                extras.append(format_html(
+                    '<span style="color:#666">💬 {}</span>', item['note'],
+                ))
+            if item.get('is_active') is False:
+                extras.append(mark_safe('<span style="color:#c62828">товар недоступен</span>'))
+            if not extras:
+                return base
+            return format_html('{} &nbsp;·&nbsp; {}', base, mark_safe(' &nbsp;·&nbsp; '.join(str(e) for e in extras)))
+
+        return format_html_join(mark_safe('<br>'), '{}', ((_row(i),) for i in obj.cart_snapshot))
     cart_snapshot_display.short_description = 'Состав корзины'

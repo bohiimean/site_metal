@@ -107,8 +107,15 @@
       // ─ UI модала обратного звонка ─
       Alpine.store('callbackUI', {
         open: false,
-        openModal() { this.open = true; },
-        close() { this.open = false; },
+        prefillComment: '',
+        openModal(prefillComment) {
+          this.prefillComment = prefillComment || '';
+          this.open = true;
+        },
+        close() {
+          this.open = false;
+          this.prefillComment = '';
+        },
       });
 
       // ─ Форма оформления заявки из корзины ─
@@ -149,6 +156,17 @@
 
             this.loading = true;
             try {
+              // Клиент отправляет только sku/qty/note — цену и название сервер
+              // берёт из БД, чтобы клиент не мог подсунуть свою цену.
+              // client_price отправляем для сверки — менеджер увидит расхождение.
+              var items = this.$store.cart.items.map(function(i) {
+                return {
+                  sku: i.sku,
+                  qty: i.qty,
+                  price: i.price,       // клиент видел эту цену — для сверки
+                  note: i.note || null,
+                };
+              });
               var resp = await fetch('/leads/submit/', {
                 method: 'POST',
                 headers: {
@@ -160,8 +178,7 @@
                   phone: this.phone.trim(),
                   comment: this.comment.trim(),
                   agree: this.agree,
-                  cart_snapshot: this.$store.cart.items,
-                  source: 'cart',
+                  cart_snapshot: items,
                 }),
               });
               var data = await resp.json();
@@ -183,10 +200,15 @@
 
     });
   </script>
-  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script defer
+          src="{% static 'vendor/alpine-3.14.9.min.js' %}"
+          integrity="sha384-9Ax3MmS9AClxJyd5/zafcXXjxmwFhZCdsT6HJoJjarvCaAkJlk5QDzjLJm+Wdx5F"
+          crossorigin="anonymous"></script>
 
   <!-- htmx -->
-  <script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js"></script>
+  <script src="{% static 'vendor/htmx-2.0.4.min.js' %}"
+          integrity="sha384-HGfztofotfshcF7+8n44JQL2oJmowVChPTg48S+jvZoztPfvwD79OC/LTtG6dMp+"
+          crossorigin="anonymous"></script>
   <script>
     document.addEventListener('htmx:afterSwap', function(e) {
       Alpine.initTree(e.detail.elt);
