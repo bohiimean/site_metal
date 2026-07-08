@@ -1,9 +1,10 @@
 from django.contrib import admin
+from unfold.admin import ModelAdmin
 from .models import Page, News
 
 
 @admin.register(Page)
-class PageAdmin(admin.ModelAdmin):
+class PageAdmin(ModelAdmin):
     list_display = ['title', 'slug']
     search_fields = ['title', 'slug']
     prepopulated_fields = {'slug': ('title',)}
@@ -14,7 +15,7 @@ class PageAdmin(admin.ModelAdmin):
 
 
 @admin.register(News)
-class NewsAdmin(admin.ModelAdmin):
+class NewsAdmin(ModelAdmin):
     list_display = ['title', 'published_at']
     search_fields = ['title']
     prepopulated_fields = {'slug': ('title',)}

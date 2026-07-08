@@ -1,5 +1,6 @@
 from django import forms
 from django.contrib import admin
+from unfold.admin import ModelAdmin
 
 from .models import Material, SteelGrade, Finish, Color, FinishColor
 from .widgets import GroupedColorCheckboxWidget
@@ -8,7 +9,7 @@ from .widgets import GroupedColorCheckboxWidget
 # ─── Materials ────────────────────────────────────────────────────────────────
 
 @admin.register(Material)
-class MaterialAdmin(admin.ModelAdmin):
+class MaterialAdmin(ModelAdmin):
     list_display = ['name', 'slug', 'landing_title', 'is_active']
     list_editable = ['is_active']
     prepopulated_fields = {'slug': ('name',)}
@@ -18,7 +19,7 @@ class MaterialAdmin(admin.ModelAdmin):
 # ─── Steel grades ─────────────────────────────────────────────────────────────
 
 @admin.register(SteelGrade)
-class SteelGradeAdmin(admin.ModelAdmin):
+class SteelGradeAdmin(ModelAdmin):
     list_display = ['name', 'material', 'is_active']
     list_editable = ['is_active']
     list_filter = ['material']
@@ -50,7 +51,7 @@ class FinishAdminForm(forms.ModelForm):
 
 
 @admin.register(Finish)
-class FinishAdmin(admin.ModelAdmin):
+class FinishAdmin(ModelAdmin):
     form = FinishAdminForm
     list_display  = ['name', 'slug', 'color_ui', 'color_count', 'is_active']
     list_editable = ['color_ui', 'is_active']
@@ -75,7 +76,7 @@ class FinishAdmin(admin.ModelAdmin):
 # ─── Color ────────────────────────────────────────────────────────────────────
 
 @admin.register(Color)
-class ColorAdmin(admin.ModelAdmin):
+class ColorAdmin(ModelAdmin):
     list_display  = ['color_swatch', 'name', 'hex_code', 'ral_code', 'color_group', 'is_active']
     list_editable = ['color_group', 'is_active']
     list_filter   = ['color_group']

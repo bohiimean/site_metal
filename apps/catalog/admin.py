@@ -6,7 +6,7 @@ from django.http import JsonResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
 from django.utils.html import format_html
-from adminsortable2.admin import SortableAdminBase, SortableInlineAdminMixin
+from unfold.admin import ModelAdmin, TabularInline
 from treebeard.admin import TreeAdmin
 from treebeard.forms import movenodeform_factory
 
@@ -16,6 +16,10 @@ from .models import Category, Product, ProductImage, ProductColorImage, ProductV
 
 @admin.register(Category)
 class CategoryAdmin(TreeAdmin):
+    # TreeAdmin не наследует unfold.admin.ModelAdmin (см. CLAUDE.md/известное
+    # ограничение), поэтому unfold-атрибуты вроде show_add_link нужно
+    # прописывать вручную — иначе шаблон add_link.html молча скрывает кнопку.
+    show_add_link = True
     form = movenodeform_factory(Category)
     list_display = ['name', 'slug', 'image_preview', 'is_active']
     list_editable = ['is_active']
@@ -32,11 +36,12 @@ class CategoryAdmin(TreeAdmin):
     image_preview.short_description = 'Картинка'
 
 
-class ProductImageInline(SortableInlineAdminMixin, admin.TabularInline):
+class ProductImageInline(TabularInline):
     model = ProductImage
     extra = 0
     fields = ['image', 'sort_order', 'thumb_preview']
     readonly_fields = ['thumb_preview']
+    ordering_field = 'sort_order'
 
     def thumb_preview(self, obj):
         if obj.pk and obj.image:
@@ -48,7 +53,7 @@ class ProductImageInline(SortableInlineAdminMixin, admin.TabularInline):
     thumb_preview.short_description = 'Превью'
 
 
-class ProductColorImageInline(admin.TabularInline):
+class ProductColorImageInline(TabularInline):
     model = ProductColorImage
     extra = 0
     fields = ['color', 'color_group', 'image', 'thumb_preview']
@@ -67,7 +72,7 @@ class ProductColorImageInline(admin.TabularInline):
 
 
 @admin.register(Product)
-class ProductAdmin(SortableAdminBase, admin.ModelAdmin):
+class ProductAdmin(ModelAdmin):
     change_form_template = 'admin/catalog/product/change_form.html'
 
     list_display = ['name', 'category', 'is_active', 'is_new', 'created_at']
@@ -313,7 +318,7 @@ class ProductListFilter(admin.SimpleListFilter):
 # ─── ProductVariant standalone admin ─────────────────────────────────────────
 
 @admin.register(ProductVariant)
-class ProductVariantAdmin(admin.ModelAdmin):
+class ProductVariantAdmin(ModelAdmin):
     list_display = [
         'sku', 'product_link', 'material', 'steel_grade',
         'finish', 'length_m', 'allow_custom_length', 'unit', 'in_stock', 'is_active',

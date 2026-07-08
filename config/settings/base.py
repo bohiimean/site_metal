@@ -8,6 +8,7 @@ SECRET_KEY = config('SECRET_KEY')
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='*').split(',')
 
 DJANGO_APPS = [
+    'unfold',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -21,7 +22,6 @@ THIRD_PARTY_APPS = [
     'treebeard',
     'django_filters',
     'imagekit',
-    'adminsortable2',
     'django_ratelimit',
 ]
 
@@ -103,3 +103,11 @@ SITE_URL = config('SITE_URL', default='')
 
 YANDEX_CAPTCHA_SERVER_KEY = config('YANDEX_CAPTCHA_SERVER_KEY', default='')
 YANDEX_CAPTCHA_CLIENT_KEY = config('YANDEX_CAPTCHA_CLIENT_KEY', default='')
+
+UNFOLD = {
+    'SITE_TITLE': 'МЕТАПРОФ — админка',
+    'SITE_HEADER': 'МЕТАПРОФ',
+    'SITE_SYMBOL': 'factory',
+    'SHOW_HISTORY': True,
+    'SHOW_VIEW_ON_SITE': True,
+}

@@ -1,6 +1,7 @@
 from django.contrib import admin
 from django.utils.html import format_html, format_html_join
 from django.utils.safestring import mark_safe
+from unfold.admin import ModelAdmin
 from .models import Lead
 
 
@@ -13,7 +14,7 @@ def make_status_action(status, label):
 
 
 @admin.register(Lead)
-class LeadAdmin(admin.ModelAdmin):
+class LeadAdmin(ModelAdmin):
     list_display = ['id', 'name', 'phone', 'source_badge', 'status_badge', 'created_at']
     list_filter = ['status', 'source']
     search_fields = ['name', 'phone']
