@@ -1,6 +1,6 @@
 import django_filters
 
-from apps.references.models import Material
+from apps.references.models import Material, SteelGrade, Finish
 from .models import Product
 
 
@@ -9,6 +9,16 @@ class ProductFilter(django_filters.FilterSet):
         queryset=Material.objects.filter(is_active=True),
         field_name='variants__material',
         label='Материал',
+    )
+    steel_grade = django_filters.ModelMultipleChoiceFilter(
+        queryset=SteelGrade.objects.filter(is_active=True),
+        field_name='variants__steel_grade',
+        label='Марка стали',
+    )
+    finish = django_filters.ModelMultipleChoiceFilter(
+        queryset=Finish.objects.filter(is_active=True),
+        field_name='variants__finish',
+        label='Обработка',
     )
     in_stock = django_filters.BooleanFilter(
         method='filter_in_stock',

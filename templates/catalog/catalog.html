@@ -34,27 +34,9 @@
             hx-trigger="change"
             hx-push-url="true">
 
-        <!-- Материал -->
-        <div x-data="{open: true}" class="border-b border-border pb-4 mb-4">
-          <button type="button" @click="open = !open"
-                  class="flex items-center justify-between w-full text-[11px] font-semibold uppercase tracking-widest text-muted mb-3">
-            Материал
-            <svg class="w-3 h-3 transition-transform" :class="open ? 'rotate-0' : '-rotate-90'"
-                 fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-            </svg>
-          </button>
-          <div x-show="open" x-collapse class="space-y-2">
-            {% for material in materials %}
-              <label class="flex items-center gap-2 text-[12px] text-primary cursor-pointer hover:text-accent">
-                <input type="checkbox" name="material" value="{{ material.pk }}"
-                       {% if material.pk|stringformat:'s' in selected_materials %}checked{% endif %}
-                       class="accent-[var(--color-accent)] w-3.5 h-3.5 rounded-sm">
-                {{ material.name }}
-              </label>
-            {% endfor %}
-          </div>
-        </div>
+        {% include "catalog/_filter_facet.html" with title="Материал"    name="material"    options=materials    selected=selected_materials %}
+        {% include "catalog/_filter_facet.html" with title="Марка стали" name="steel_grade" options=steel_grades selected=selected_steel_grades %}
+        {% include "catalog/_filter_facet.html" with title="Обработка"   name="finish"      options=finishes     selected=selected_finishes %}
 
         <!-- Наличие -->
         <div class="border-b border-border pb-4 mb-4">
@@ -66,18 +48,12 @@
           </label>
         </div>
 
-        <button type="submit"
-                hx-get="{{ request.path }}"
-                hx-target="#product-grid-section"
-                hx-include="#filter-form"
-                class="w-full btn-accent text-[11px] mb-2">
-          Применить
-        </button>
         <a href="{{ request.path }}" class="block text-center text-[11px] text-muted hover:text-accent transition-colors">
-          Сбросить
+          Сбросить фильтры
         </a>
 
       </form>
+      {% include "catalog/_facet_deps.html" %}
     </aside>
 
     <!-- ─── Основной контент ─── -->

@@ -1,0 +1,33 @@
+{% comment %}
+Зависимости фасетов: марки стали принадлежат материалу (FK) — при выбранных
+материалах марки чужих материалов глушатся, их галочки снимаются.
+Скрипт выполняется при парсинге (до инициализации htmx), поэтому снятие галки
+попадает в тот же htmx-запрос, что и клик по материалу.
+{% endcomment %}
+<script>
+(function () {
+  function sync(form) {
+    var mats = Array.prototype.map.call(
+      form.querySelectorAll('input[name="material"]:checked'),
+      function (i) { return i.value; }
+    );
+    form.querySelectorAll('input[name="steel_grade"][data-material]').forEach(function (cb) {
+      var off = mats.length > 0 && mats.indexOf(cb.dataset.material) === -1;
+      cb.disabled = off;
+      if (off && cb.checked) cb.checked = false;
+      var label = cb.closest('label');
+      if (label) {
+        label.classList.toggle('opacity-30', off);
+        label.classList.toggle('pointer-events-none', off);
+      }
+    });
+  }
+
+  document.querySelectorAll('#filter-form, #search-form').forEach(function (form) {
+    sync(form);
+    form.addEventListener('change', function (e) {
+      if (e.target.name === 'material') sync(form);
+    });
+  });
+})();
+</script>

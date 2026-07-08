@@ -3,7 +3,7 @@ from django.db.models import Q
 from django.http import Http404
 from django.shortcuts import render
 
-from apps.references.models import FinishColor, Material
+from apps.references.models import FinishColor, Material, SteelGrade, Finish
 from .filters import ProductFilter
 from .models import Category, Product
 
@@ -17,6 +17,20 @@ SORT_MAP = {
 def _product_qs():
     """Базовый QuerySet товаров с нужными join-ами."""
     return Product.objects.for_cards()
+
+
+def _facet_ctx(request):
+    """Опции фасетов сайдбара. Значения — из справочников (управляются в админке);
+    показываем только те, что реально встречаются в активных вариантах."""
+    used = {'productvariant__is_active': True, 'is_active': True}
+    return {
+        'materials':             Material.objects.filter(**used).distinct(),
+        'steel_grades':          SteelGrade.objects.filter(**used).distinct(),
+        'finishes':              Finish.objects.filter(**used).distinct(),
+        'selected_materials':    request.GET.getlist('material'),
+        'selected_steel_grades': request.GET.getlist('steel_grade'),
+        'selected_finishes':     request.GET.getlist('finish'),
+    }
 
 
 def search_view(request):
@@ -44,7 +58,6 @@ def search_view(request):
         page_num = 1
     page_obj = paginator.get_page(page_num)
 
-    materials = Material.objects.filter(is_active=True)
     suggestions = Category.objects.filter(is_active=True, depth=1)[:3]
     is_htmx = request.headers.get('HX-Request') == 'true'
 
@@ -54,9 +67,8 @@ def search_view(request):
         'paginator': paginator,
         'filterset': filterset,
         'sort': sort,
-        'materials': materials,
         'suggestions': suggestions,
-        'selected_materials': request.GET.getlist('material'),
+        **_facet_ctx(request),
     }
 
     if is_htmx and page_num > 1:
@@ -102,7 +114,6 @@ def _render_catalog(request, category):
         page_num = 1
     page_obj = paginator.get_page(page_num)
 
-    materials = Material.objects.filter(is_active=True)
     is_htmx = request.headers.get('HX-Request') == 'true'
 
     ctx = {
@@ -111,9 +122,8 @@ def _render_catalog(request, category):
         'filterset':         filterset,
         'category':          category,
         'sort':              sort,
-        'materials':         materials,
         'categories':        Category.objects.filter(is_active=True, depth=1),
-        'selected_materials': request.GET.getlist('material'),
+        **_facet_ctx(request),
     }
 
     if is_htmx and page_num > 1:
