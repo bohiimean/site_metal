@@ -50,33 +50,6 @@
     border-radius: 3px;
     box-sizing: border-box;
   }
-  .gen-colors { margin-bottom: 14px; }
-  .gen-colors-label {
-    font-size: 11px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: .05em;
-    color: #888;
-    margin-bottom: 8px;
-  }
-  .gen-color-groups { display: flex; flex-wrap: wrap; gap: 16px 24px; }
-  .gen-color-group-title { font-size: 11px; font-weight: 600; color: #aaa; margin-bottom: 5px; }
-  .gen-color-item {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    margin-bottom: 4px;
-    cursor: pointer;
-    font-size: 12px;
-  }
-  .gen-color-item input { margin: 0; cursor: pointer; }
-  .gen-swatch {
-    width: 13px; height: 13px;
-    border-radius: 50%;
-    border: 1px solid rgba(0,0,0,.15);
-    flex-shrink: 0;
-    display: inline-block;
-  }
   .gen-lengths { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
   .gen-length-input { width: 70px !important; }
   .gen-btn-sm { padding: 3px 8px; font-size: 12px; cursor: pointer; }
@@ -90,7 +63,7 @@
   .gen-result-ok  { color: #2e7d32; }
   .gen-result-err { color: #c62828; }
   .gen-result-sku { font-family: monospace; font-size: 11px; color: #555; margin-left: 16px; }
-  .gen-no-colors  { font-size: 12px; color: #aaa; font-style: italic; }
+  .gen-hint { font-size: 12px; color: #888; margin: 0 0 14px; }
 </style>
 {% endif %}
 {% endblock %}
@@ -101,6 +74,14 @@
 
 {% block after_related_objects %}
 {{ block.super }}
+{% if not original %}
+<div class="module" style="margin-top: 24px; padding: 12px 16px;">
+  <p style="margin: 0; color: #888; font-size: 12px;">
+    ⚡ Генератор вариантов появится после первого сохранения товара
+    (нажмите «Сохранить и продолжить редактирование»).
+  </p>
+</div>
+{% endif %}
 {% if original %}
 <div style="margin-top: 24px;">
 
@@ -123,6 +104,11 @@
   <div class="module" style="padding: 0; overflow: hidden;">
     <h2 style="margin: 0; padding: 9px 14px; font-size: 13px;">⚡ Генератор вариантов</h2>
     <div style="padding: 14px 16px;">
+      <p class="gen-hint">
+        Вариант = материал × марка × обработка × размеры.
+        Цвет вариантом не является — палитра берётся из «Цветов обработки»,
+        фото под цвет задаются в блоке «Фото по цветам» выше.
+      </p>
       <div x-data="variantGenerator('{% url "admin:catalog_product_generate_variants" original.pk %}')"
            x-init="init()">
 
@@ -161,57 +147,13 @@
               </div>
               <div class="gen-field">
                 <label>Обработка</label>
-                <select x-model="row.finish_id" @change="onFinishChange(row)">
+                <select x-model="row.finish_id">
                   <option value="">— без обработки —</option>
                   {% for f in gen_finishes %}
                     <option value="{{ f.pk }}">{{ f.name }}</option>
                   {% endfor %}
                 </select>
               </div>
-            </div>
-
-            {# Цвета #}
-            <div class="gen-colors">
-              <div class="gen-colors-label">Цвета</div>
-
-              <template x-if="!row.finish_id">
-                <p class="gen-no-colors">Выберите обработку — цвета загрузятся автоматически</p>
-              </template>
-              <template x-if="row.finish_id && row.loading_colors">
-                <p class="gen-no-colors">Загружаю цвета…</p>
-              </template>
-              <template x-if="row.finish_id && !row.loading_colors && !row.colors.length">
-                <p class="gen-no-colors">Для этой обработки цвета не настроены (вариант будет без цвета)</p>
-              </template>
-              <template x-if="row.finish_id && !row.loading_colors && row.colors.length">
-                <div>
-                  <div style="margin-bottom:8px;display:flex;gap:8px;">
-                    <button type="button" class="button gen-btn-sm"
-                            @click="selectAllColors(row)">Выбрать все</button>
-                    <button type="button" class="button gen-btn-sm"
-                            style="background:#888;border-color:#888;"
-                            @click="row.color_ids = []">Сбросить</button>
-                  </div>
-                  <div class="gen-color-groups">
-                    <template x-for="group in groupedColors(row)" :key="group.label">
-                      <div>
-                        <p class="gen-color-group-title" x-text="group.label"></p>
-                        <template x-for="c in group.items" :key="c.id">
-                          <label class="gen-color-item">
-                            <input type="checkbox"
-                                   :value="c.id"
-                                   :checked="row.color_ids.includes(c.id)"
-                                   @change="toggleColor(row, c.id)">
-                            <span class="gen-swatch"
-                                  :style="'background:' + (c.hex || '#cccccc')"></span>
-                            <span x-text="c.name + (c.ral ? ' (' + c.ral + ')' : '')"></span>
-                          </label>
-                        </template>
-                      </div>
-                    </template>
-                  </div>
-                </div>
-              </template>
             </div>
 
             {# Длины #}
@@ -245,14 +187,10 @@
               </div>
             </div>
 
-            {# Цена / Единица / Наличие / Высота / SKU-префикс #}
+            {# Единица / Наличие / Высота / SKU-префикс #}
             <div class="gen-grid">
               <div class="gen-field">
-                <label>Цена, ₽ *</label>
-                <input type="number" step="0.01" min="0" x-model="row.price">
-              </div>
-              <div class="gen-field">
-                <label>Единица цены</label>
+                <label>Единица измерения</label>
                 <select x-model="row.unit">
                   {% for val, label in gen_unit_choices %}
                     <option value="{{ val }}">{{ label }}</option>
@@ -272,7 +210,7 @@
                 <input type="number" step="0.1" min="0" x-model="row.height_mm"
                        placeholder="необязательно">
               </div>
-              <div class="gen-field" style="grid-column:span 2;">
+              <div class="gen-field" style="grid-column:span 3;">
                 <label>
                   SKU-префикс
                   <span style="font-weight:400;text-transform:none;">
@@ -350,12 +288,6 @@
 </div>
 
 <script>
-const COLOR_GROUP_LABELS = {
-  white: 'Белые', gray: 'Серые', black: 'Чёрные', brown: 'Коричневые',
-  blue: 'Синие', green: 'Зелёные', metallic: 'Металлик', other: 'Другие', '': 'Прочие',
-};
-const COLOR_GROUP_ORDER = ['white','gray','black','brown','blue','green','metallic','other',''];
-
 function variantGenerator(genUrl) {
   return {
     genUrl: genUrl,
@@ -368,10 +300,10 @@ function variantGenerator(genUrl) {
     newRow() {
       return {
         material_id: '', steel_grade_id: '', finish_id: '',
-        color_ids: [], lengths: ['3'], price: '', unit: 'm',
+        lengths: ['3'], unit: 'm',
         in_stock: 'in_stock', height_mm: '', sku_prefix: '',
-        steel_grades: [], colors: [],
-        loading_grades: false, loading_colors: false,
+        steel_grades: [],
+        loading_grades: false,
       };
     },
 
@@ -379,23 +311,6 @@ function variantGenerator(genUrl) {
     removeRow(i)         { this.rows.splice(i, 1); },
     addLength(row)       { row.lengths.push(''); },
     removeLength(row, i) { row.lengths.splice(i, 1); },
-
-    toggleColor(row, id) {
-      const idx = row.color_ids.indexOf(id);
-      if (idx === -1) row.color_ids.push(id);
-      else row.color_ids.splice(idx, 1);
-    },
-    selectAllColors(row) { row.color_ids = row.colors.map(c => c.id); },
-
-    groupedColors(row) {
-      const map = {};
-      for (const c of row.colors) {
-        const k = c.group || '';
-        if (!map[k]) map[k] = { label: COLOR_GROUP_LABELS[k] || k, items: [] };
-        map[k].items.push(c);
-      }
-      return COLOR_GROUP_ORDER.filter(k => map[k]).map(k => map[k]);
-    },
 
     async onMaterialChange(row) {
       row.steel_grade_id = ''; row.steel_grades = [];
@@ -407,16 +322,6 @@ function variantGenerator(genUrl) {
       } finally { row.loading_grades = false; }
     },
 
-    async onFinishChange(row) {
-      row.color_ids = []; row.colors = [];
-      if (!row.finish_id) return;
-      row.loading_colors = true;
-      try {
-        const r = await fetch(`/admin/catalog/product/api/colors/?finish=${row.finish_id}`);
-        row.colors = await r.json();
-      } finally { row.loading_colors = false; }
-    },
-
     getCsrf() {
       const m = document.cookie.match(/csrftoken=([^;]+)/);
       return m ? m[1] : '';
@@ -426,9 +331,6 @@ function variantGenerator(genUrl) {
       for (let i = 0; i < this.rows.length; i++) {
         if (!this.rows[i].material_id) {
           alert(`Строка ${i + 1}: выберите материал`); return;
-        }
-        if (!this.rows[i].price || parseFloat(this.rows[i].price) <= 0) {
-          alert(`Строка ${i + 1}: укажите корректную цену`); return;
         }
       }
       this.loading = true; this.results = null;

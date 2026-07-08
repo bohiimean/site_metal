@@ -33,16 +33,4 @@
         });
     });
 
-    $(document).on('change', 'select[name="finish"]', function () {
-        var $sel = $(this);
-        var $color = $('select[name="color"]');
-        if (!$color.length) return;
-        var cur = $color.val();
-        var finId = $sel.val();
-        if (!finId) { updateSelect($color, buildOptions([], null, '---------')); return; }
-        $.getJSON(API + 'colors/', { finish: finId }, function (data) {
-            updateSelect($color, buildOptions(data, cur, '---------'));
-        });
-    });
-
 }(django.jQuery));

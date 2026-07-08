@@ -211,14 +211,23 @@ class Command(BaseCommand):
             )
             return p
 
-        def variant(prod, sku, mat, price, unit='m', length=None, height=None,
+        # price/color в сигнатуре оставлены, чтобы не переписывать все вызовы:
+        # цена ушла из модели (её называет менеджер), цвет — параметр заказа,
+        # а не вариант. Одинаковые комбинации (бывшие цветовые варианты)
+        # схлопываются проверкой на дубль.
+        def variant(prod, sku, mat, price=None, unit='m', length=None, height=None,
                     grade=None, finish=None, color=None, stock='in_stock'):
             if ProductVariant.objects.filter(sku=sku).exists():
                 return
+            if ProductVariant.objects.filter(
+                product=prod, material=mat, steel_grade=grade,
+                finish=finish, length_m=length, height_mm=height,
+            ).exists():
+                return
             ProductVariant.objects.create(
                 product=prod, sku=sku, material=mat,
-                steel_grade=grade, finish=finish, color=color,
-                price=price, unit=unit,
+                steel_grade=grade, finish=finish,
+                unit=unit,
                 length_m=length, height_mm=height,
                 in_stock=stock,
             )

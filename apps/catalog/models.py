@@ -4,7 +4,7 @@ from treebeard.mp_tree import MP_Node
 from imagekit.models import ImageSpecField
 from imagekit.processors import ResizeToFill, ResizeToFit
 
-from apps.references.models import Material, SteelGrade, Finish, Color, FinishColor
+from apps.references.models import Material, SteelGrade, Finish, Color
 
 
 class Category(MP_Node):
@@ -37,11 +37,10 @@ class Category(MP_Node):
 
 class ProductQuerySet(models.QuerySet):
     def for_cards(self):
-        """QuerySet для сетки карточек: с min_price, первым фото и первым вариантом."""
-        from django.db.models import Min, Prefetch
+        """QuerySet для сетки карточек: с первым фото и первым вариантом."""
+        from django.db.models import Prefetch
         return (
             self.filter(is_active=True)
-            .annotate(min_price=Min('variants__price'))
             .select_related('category')
             .prefetch_related(
                 Prefetch(
@@ -51,7 +50,7 @@ class ProductQuerySet(models.QuerySet):
                 ),
                 Prefetch(
                     'variants',
-                    queryset=ProductVariant.objects.filter(is_active=True).order_by('price'),
+                    queryset=ProductVariant.objects.filter(is_active=True).order_by('sku'),
                     to_attr='prefetched_variants',
                 ),
             )
@@ -95,10 +94,6 @@ class Product(models.Model):
             raise ValidationError({
                 'slug': 'Такой slug уже используется категорией. Выберите другой.',
             })
-
-    def get_min_price(self):
-        result = self.variants.filter(is_active=True).order_by('price').first()
-        return result.price if result else None
 
     def get_first_image(self):
         return self.images.order_by('sort_order').first()
@@ -148,12 +143,92 @@ class ProductImage(models.Model):
         return f'Фото #{self.sort_order} — {self.product}'
 
 
+class ProductColorImage(models.Model):
+    """Фото товара под конкретный цвет или группу цветов.
+
+    Логика показа на карточке (fallback-цепочка):
+    точный цвет → группа цвета → дефолтное фото товара.
+    """
+    product = models.ForeignKey(
+        Product, on_delete=models.CASCADE,
+        related_name='color_images',
+        verbose_name='Товар',
+    )
+    color = models.ForeignKey(
+        Color, on_delete=models.CASCADE,
+        null=True, blank=True,
+        verbose_name='Цвет',
+        help_text='Фото под конкретный цвет',
+    )
+    color_group = models.CharField(
+        'Группа цветов', max_length=20,
+        choices=Color.COLOR_GROUP_CHOICES, blank=True,
+        help_text='Или одно фото на всю группу (синие, серые, …)',
+    )
+    image = models.ImageField('Изображение', upload_to='products/colors/')
+
+    thumb = ImageSpecField(
+        source='image',
+        processors=[ResizeToFill(120, 90)],
+        format='WEBP',
+        options={'quality': 85},
+    )
+    card = ImageSpecField(
+        source='image',
+        processors=[ResizeToFill(600, 450)],
+        format='WEBP',
+        options={'quality': 85},
+    )
+    gallery = ImageSpecField(
+        source='image',
+        processors=[ResizeToFill(1000, 750)],
+        format='WEBP',
+        options={'quality': 90},
+    )
+    zoom = ImageSpecField(
+        source='image',
+        processors=[ResizeToFit(2000, 2000)],
+        format='WEBP',
+        options={'quality': 92},
+    )
+
+    class Meta:
+        verbose_name = 'Фото по цвету'
+        verbose_name_plural = 'Фото по цветам'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['product', 'color'],
+                condition=models.Q(color__isnull=False),
+                name='uniq_product_color_image',
+            ),
+            models.UniqueConstraint(
+                fields=['product', 'color_group'],
+                condition=~models.Q(color_group=''),
+                name='uniq_product_color_group_image',
+            ),
+        ]
+
+    def __str__(self):
+        target = self.color or self.get_color_group_display() or '?'
+        return f'{self.product} — {target}'
+
+    def clean(self):
+        if bool(self.color_id) == bool(self.color_group):
+            raise ValidationError(
+                'Укажите ровно одно: конкретный цвет ИЛИ группу цветов.'
+            )
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+
 class ProductVariant(models.Model):
     UNIT_CHOICES = [
-        ('m',     'за метр'),
-        ('piece', 'за штуку'),
-        ('sheet', 'за лист'),
-        ('kg',    'за кг'),
+        ('m',     'метр'),
+        ('piece', 'штука'),
+        ('sheet', 'лист'),
+        ('kg',    'кг'),
     ]
     STOCK_CHOICES = [
         ('in_stock',    'В наличии'),
@@ -182,17 +257,6 @@ class ProductVariant(models.Model):
         null=True, blank=True,
         verbose_name='Обработка',
     )
-    color = models.ForeignKey(
-        Color, on_delete=models.SET_NULL,
-        null=True, blank=True,
-        verbose_name='Цвет',
-    )
-    image = models.ForeignKey(
-        ProductImage, on_delete=models.SET_NULL,
-        null=True, blank=True,
-        verbose_name='Изображение варианта',
-        help_text='Если не задано — показывается первое фото товара',
-    )
 
     height_mm = models.DecimalField(
         'Высота, мм', max_digits=8, decimal_places=2,
@@ -202,8 +266,7 @@ class ProductVariant(models.Model):
         'Длина, м', max_digits=8, decimal_places=2,
         null=True, blank=True,
     )
-    price = models.DecimalField('Цена', max_digits=10, decimal_places=2)
-    unit = models.CharField('Единица цены', max_length=10, choices=UNIT_CHOICES, default='m')
+    unit = models.CharField('Единица измерения', max_length=10, choices=UNIT_CHOICES, default='m')
     in_stock = models.CharField(
         'Наличие', max_length=20,
         choices=STOCK_CHOICES, default='in_stock',
@@ -213,7 +276,7 @@ class ProductVariant(models.Model):
     class Meta:
         verbose_name = 'Вариант товара'
         verbose_name_plural = 'Варианты товара'
-        ordering = ['price']
+        ordering = ['sku']
 
     def __str__(self):
         return f'{self.product} / {self.sku}'
@@ -242,26 +305,6 @@ class ProductVariant(models.Model):
                     'steel_grade': 'У выбранного материала нет активных марок стали.',
                 })
 
-        # 3. Цвет допустим только при заданной обработке, и пара (finish, color)
-        #    должна существовать в FinishColor
-        if self.color_id and not self.finish_id:
-            raise ValidationError({
-                'color': 'Нельзя выбрать цвет без обработки.',
-            })
-
-        if self.color_id and self.finish_id:
-            if not FinishColor.objects.filter(
-                finish_id=self.finish_id,
-                color_id=self.color_id,
-            ).exists():
-                raise ValidationError({
-                    'color': 'Такая комбинация обработки и цвета недопустима.',
-                })
-
     def save(self, *args, **kwargs):
         self.full_clean()
         super().save(*args, **kwargs)
-
-    def get_image(self):
-        """Возвращает изображение варианта или первое фото товара."""
-        return self.image or self.product.get_first_image()

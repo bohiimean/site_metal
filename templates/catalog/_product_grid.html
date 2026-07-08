@@ -5,9 +5,8 @@
   </p>
   <select name="sort" form="filter-form"
           class="text-[12px] border border-border rounded px-3 py-1.5 bg-surface text-primary cursor-pointer">
-    <option value="new"       {% if sort == 'new'       %}selected{% endif %}>По новизне</option>
-    <option value="price_asc" {% if sort == 'price_asc' %}selected{% endif %}>Цена: по возрастанию</option>
-    <option value="price_desc"{% if sort == 'price_desc'%}selected{% endif %}>Цена: по убыванию</option>
+    <option value="new"  {% if sort == 'new'  %}selected{% endif %}>По новизне</option>
+    <option value="name" {% if sort == 'name' %}selected{% endif %}>По названию</option>
   </select>
 </div>
 

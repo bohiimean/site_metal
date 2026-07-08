@@ -1,5 +1,4 @@
 import django_filters
-from django.db.models import Min
 
 from apps.references.models import Material
 from .models import Product
@@ -15,16 +14,6 @@ class ProductFilter(django_filters.FilterSet):
         method='filter_in_stock',
         label='Только в наличии',
         widget=django_filters.widgets.BooleanWidget(),
-    )
-    price_min = django_filters.NumberFilter(
-        field_name='variants__price',
-        lookup_expr='gte',
-        label='Цена от',
-    )
-    price_max = django_filters.NumberFilter(
-        field_name='variants__price',
-        lookup_expr='lte',
-        label='Цена до',
     )
 
     class Meta:

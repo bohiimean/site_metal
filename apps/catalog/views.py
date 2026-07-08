@@ -3,15 +3,14 @@ from django.db.models import Q
 from django.http import Http404
 from django.shortcuts import render
 
-from apps.references.models import Material
+from apps.references.models import FinishColor, Material
 from .filters import ProductFilter
 from .models import Category, Product
 
 PAGE_SIZE = 9
 SORT_MAP = {
-    'price_asc':  'min_price',
-    'price_desc': '-min_price',
-    'new':        '-created_at',
+    'name': 'name',
+    'new':  '-created_at',
 }
 
 
@@ -130,20 +129,13 @@ def _product_detail(request, product):
     variants_qs = (
         product.variants
         .filter(is_active=True)
-        .select_related('material', 'steel_grade', 'finish', 'color', 'image')
-        .order_by('price')
+        .select_related('material', 'steel_grade', 'finish')
+        .order_by('sku')
     )
     images = list(product.images.order_by('sort_order'))
 
     variants_data = []
     for v in variants_qs:
-        img = v.image or (images[0] if images else None)
-        try:
-            card_url    = img.card.url    if img and img.image else None
-            gallery_url = img.gallery.url if img and img.image else None
-        except Exception:
-            card_url = gallery_url = None
-
         variants_data.append({
             'id':               v.id,
             'sku':              v.sku,
@@ -154,20 +146,12 @@ def _product_detail(request, product):
             'finish_id':        v.finish_id,
             'finish_name':      v.finish.name      if v.finish else None,
             'finish_color_ui':  v.finish.color_ui  if v.finish else 'swatches',
-            'color_id':         v.color_id,
-            'color_name':       v.color.name        if v.color else None,
-            'color_hex':        v.color.hex_code     if v.color else None,
-            'color_ral_code':   v.color.ral_code     if v.color else '',
-            'color_group':      v.color.color_group  if v.color else '',
             'height_mm':        str(v.height_mm) if v.height_mm else None,
             'length_m':         str(v.length_m)  if v.length_m  else None,
-            'price':            str(v.price),
             'unit':             v.unit,
             'unit_display':     v.get_unit_display(),
             'in_stock':         v.in_stock,
             'in_stock_display': v.get_in_stock_display(),
-            'image_url':        card_url,
-            'gallery_url':      gallery_url,
         })
 
     combinations = [
@@ -175,15 +159,49 @@ def _product_detail(request, product):
             'material_id':    v['material_id'],
             'steel_grade_id': v['steel_grade_id'],
             'finish_id':      v['finish_id'],
-            'color_id':       v['color_id'],
             'length_m':       v['length_m'],
         }
         for v in variants_data
     ]
 
+    # Палитра: цвета каждой обработки, встречающейся в вариантах (из FinishColor)
+    finish_ids = {v['finish_id'] for v in variants_data if v['finish_id']}
+    finish_colors = {}
+    if finish_ids:
+        fc_qs = (
+            FinishColor.objects
+            .filter(finish_id__in=finish_ids, color__is_active=True)
+            .select_related('color')
+            .order_by('color__color_group', 'color__name')
+        )
+        for fc in fc_qs:
+            c = fc.color
+            finish_colors.setdefault(fc.finish_id, []).append({
+                'id':       c.id,
+                'name':     c.name,
+                'hex':      c.hex_code,
+                'ral_code': c.ral_code,
+                'group':    c.color_group,
+            })
+
+    # Карта «цвет → фото»: точный цвет приоритетнее группы;
+    # fallback до дефолтного фото товара — на клиенте
+    color_images = {}
+    for ci in product.color_images.select_related('color'):
+        try:
+            urls = {'card': ci.card.url, 'gallery': ci.gallery.url}
+        except Exception:
+            continue
+        if ci.color_id:
+            color_images[f'color:{ci.color_id}'] = urls
+        elif ci.color_group:
+            color_images[f'group:{ci.color_group}'] = urls
+
     return render(request, 'catalog/product_detail.html', {
-        'product':           product,
-        'images':            images,
-        'variants_json':     variants_data,
-        'combinations_json': combinations,
+        'product':            product,
+        'images':             images,
+        'variants_json':      variants_data,
+        'combinations_json':  combinations,
+        'finish_colors_json': finish_colors,
+        'color_images_json':  color_images,
     })

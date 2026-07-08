@@ -54,18 +54,16 @@ class LeadAdmin(admin.ModelAdmin):
 
         def _row(item):
             base = format_html(
-                '{} &nbsp;·&nbsp; арт. {} &nbsp;·&nbsp; ×{} &nbsp;·&nbsp; {} ₽/{}',
+                '{} &nbsp;·&nbsp; арт. {} &nbsp;·&nbsp; ×{} {}',
                 item.get('name', '?'),
                 item.get('sku', '?'),
                 item.get('qty', 1),
-                item.get('price') if item.get('price') is not None else '?',
                 item.get('unit', ''),
             )
             extras = []
-            if item.get('client_saw_price'):
+            if item.get('color'):
                 extras.append(format_html(
-                    '<span style="color:#c62828">клиент видел {} ₽</span>',
-                    item['client_saw_price'],
+                    '<span style="color:#555">🎨 {}</span>', item['color'],
                 ))
             if item.get('note'):
                 extras.append(format_html(

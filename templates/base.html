@@ -60,21 +60,27 @@
       });
 
       // ─ Глобальная корзина (localStorage) ─
+      // Позиция = SKU + цвет (+ note): один вариант в разных цветах — разные строки.
+      function cartKey(i) {
+        return i.sku + '::' + (i.color || '') + '::' + (i.note || '');
+      }
       Alpine.store('cart', {
-        items: JSON.parse(localStorage.getItem('cart') || '[]'),
+        items: JSON.parse(localStorage.getItem('cart') || '[]')
+          .map(function(i) { i.key = i.key || cartKey(i); return i; }),
 
         add(item) {
-          var ex = this.items.find(function(i) { return i.sku === item.sku; });
+          item.key = cartKey(item);
+          var ex = this.items.find(function(i) { return i.key === item.key; });
           if (ex) { ex.qty += (item.qty || 1); }
           else     { this.items.push(Object.assign({ qty: 1 }, item)); }
           this._save();
         },
-        remove(sku) {
-          this.items = this.items.filter(function(i) { return i.sku !== sku; });
+        remove(key) {
+          this.items = this.items.filter(function(i) { return i.key !== key; });
           this._save();
         },
-        setQty(sku, qty) {
-          var ex = this.items.find(function(i) { return i.sku === sku; });
+        setQty(key, qty) {
+          var ex = this.items.find(function(i) { return i.key === key; });
           if (ex) { ex.qty = Math.max(1, qty); this._save(); }
         },
         clear() { this.items = []; this._save(); },
@@ -82,11 +88,6 @@
 
         get count() {
           return this.items.reduce(function(s, i) { return s + i.qty; }, 0);
-        },
-        get total() {
-          return this.items.reduce(function(s, i) {
-            return s + (parseFloat(i.price) || 0) * i.qty;
-          }, 0);
         },
       });
 
@@ -156,14 +157,13 @@
 
             this.loading = true;
             try {
-              // Клиент отправляет только sku/qty/note — цену и название сервер
-              // берёт из БД, чтобы клиент не мог подсунуть свою цену.
-              // client_price отправляем для сверки — менеджер увидит расхождение.
+              // Клиент отправляет только sku/qty/color/note — название и единицу
+              // сервер берёт из БД по SKU, чтобы клиент не подсунул мусор.
               var items = this.$store.cart.items.map(function(i) {
                 return {
                   sku: i.sku,
                   qty: i.qty,
-                  price: i.price,       // клиент видел эту цену — для сверки
+                  color: i.color || null,
                   note: i.note || null,
                 };
               });

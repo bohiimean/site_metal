@@ -22,26 +22,36 @@ MAX_STR_LEN = 500
 
 
 def _build_cart_snapshot(client_items):
-    """Строит cart_snapshot из клиентских данных, но название/цену/единицу берёт из БД по SKU.
+    """Строит cart_snapshot из клиентских данных; название/единицу берёт из БД по SKU.
 
-    Клиент управляет только: какой SKU добавить и сколько штук.
-    Всё остальное — из БД, чтобы клиент не мог подсунуть цену 1₽ или XSS в названии.
+    Клиент управляет только: какой SKU добавить, сколько штук, какой цвет
+    (цвет — параметр заказа, не вариант). Цены нет — её называет менеджер.
     Если SKU не найден — позиция всё равно сохраняется с пометкой, чтобы менеджер
     видел, что клиент пытался заказать.
     """
     if not isinstance(client_items, list):
         return []
 
-    # Собираем валидные SKU из входа, отсекая мусор
+    # Собираем валидные позиции из входа, отсекая мусор.
+    # Ключ позиции — SKU + цвет: один вариант в разных цветах = разные строки.
     normalized = []
-    seen_skus = set()
+    seen_keys = set()
     for raw in client_items[:MAX_CART_ITEMS]:
         if not isinstance(raw, dict):
             continue
         sku = str(raw.get('sku', ''))[:MAX_STR_LEN].strip()
-        if not sku or sku in seen_skus:
+        if not sku:
             continue
-        seen_skus.add(sku)
+
+        # color — название цвета из палитры обработки (свободная строка)
+        color = str(raw.get('color') or '')[:200].strip() or None
+        # note — свободный комментарий (например, «свой цвет: RAL 6005»)
+        note = str(raw.get('note') or '')[:MAX_STR_LEN].strip() or None
+
+        key = (sku, color, note)
+        if key in seen_keys:
+            continue
+        seen_keys.add(key)
 
         try:
             qty = int(raw.get('qty', 1))
@@ -49,14 +59,7 @@ def _build_cart_snapshot(client_items):
             qty = 1
         qty = max(1, min(qty, MAX_QTY_PER_ITEM))
 
-        # note — свободный комментарий (например, «свой цвет: RAL 6005»)
-        note = str(raw.get('note') or '')[:MAX_STR_LEN].strip() or None
-
-        # Цена/название/unit, которые видел клиент — сохраняем для сверки,
-        # но реальные значения возьмём из БД
-        client_price = str(raw.get('price', ''))[:32]
-
-        normalized.append({'sku': sku, 'qty': qty, 'note': note, 'client_price': client_price})
+        normalized.append({'sku': sku, 'qty': qty, 'color': color, 'note': note})
 
     if not normalized:
         return []
@@ -75,25 +78,20 @@ def _build_cart_snapshot(client_items):
         row = {'sku': it['sku'], 'qty': it['qty']}
         if v:
             row['name'] = v.product.name
-            row['price'] = str(v.price)
             row['unit'] = v.get_unit_display()
             row['unit_code'] = v.unit
             row['product_id'] = v.product_id
             row['variant_id'] = v.id
             row['is_active'] = v.is_active and v.product.is_active
             row['in_stock'] = v.in_stock
-            # Фиксируем расхождение цены — менеджер увидит если клиент видел старую
-            if it['client_price'] and it['client_price'] != str(v.price):
-                row['client_saw_price'] = it['client_price']
         else:
             # SKU не найден в БД — товар удалён или клиент прислал мусор.
             # Сохраняем факт запроса для менеджера.
             row['name'] = '⚠ SKU не найден в каталоге'
-            row['price'] = None
             row['unit'] = ''
             row['is_active'] = False
-            if it['client_price']:
-                row['client_saw_price'] = it['client_price']
+        if it['color']:
+            row['color'] = it['color']
         if it['note']:
             row['note'] = it['note']
         snapshot.append(row)
@@ -114,8 +112,9 @@ def _send_telegram(lead_id):
 
         if lead.source == 'cart' and lead.cart_snapshot:
             lines = '\n'.join(
-                f"• {e(str(it.get('name', '?')))} × {int(it.get('qty', 1))}"
-                f" — {e(str(it.get('price', '?')))} ₽/{e(str(it.get('unit', '')))}"
+                f"• {e(str(it.get('name', '?')))} (арт. {e(str(it.get('sku', '?')))})"
+                f" × {int(it.get('qty', 1))} {e(str(it.get('unit', '')))}"
+                + (f"\n   🎨 {e(str(it.get('color')))}" if it.get('color') else '')
                 + (f"\n   💬 {e(str(it.get('note')))}" if it.get('note') else '')
                 for it in lead.cart_snapshot
             )

@@ -44,16 +44,7 @@
     {% endif %}
 
     <div class="flex items-center justify-between gap-2 mt-auto pt-2">
-      <div>
-        {% if product.min_price %}
-          <span class="text-[16px] font-bold text-primary">
-            {{ product.min_price|floatformat:0 }} ₽
-          </span>
-          {% if variant %}
-            <span class="text-[11px] text-muted">/{{ variant.get_unit_display }}</span>
-          {% endif %}
-        {% endif %}
-      </div>
+      <span class="text-[12px] font-semibold text-muted">Цена по запросу</span>
       <button
         class="btn-accent text-[10px] px-3 py-2 shrink-0"
         @click="$store.cart.add({
@@ -61,7 +52,6 @@
           slug: '{{ product.slug }}',
           sku:  '{{ variant.sku|default:''|escapejs }}',
           qty:  1,
-          price: '{{ product.min_price|default:0 }}',
           unit:  '{{ variant.get_unit_display|default:''|escapejs }}'
         })">
         Заказать

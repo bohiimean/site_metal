@@ -72,7 +72,7 @@
         <template x-if="$store.cart.count > 0">
           <div class="flex flex-col flex-1 min-h-0">
             <div class="flex-1 overflow-y-auto px-6 py-2">
-              <template x-for="item in $store.cart.items" :key="item.sku">
+              <template x-for="item in $store.cart.items" :key="item.key">
                 <div class="flex gap-3 py-[14px] border-b border-border last:border-0">
 
                   <!-- Плейсхолдер фото -->
@@ -81,31 +81,32 @@
                   <div class="flex-1 min-w-0">
                     <p class="text-[12.5px] font-semibold text-primary leading-snug mb-0.5 line-clamp-2"
                        x-text="item.name"></p>
-                    <p class="text-[11px] text-muted mb-2.5"
+                    <p class="text-[11px] text-muted mb-1"
                        x-text="'Арт. ' + item.sku + (item.unit ? ' · ' + item.unit : '')"></p>
+                    <p class="text-[11px] text-muted mb-2.5" x-show="item.color || item.note"
+                       x-text="item.color ? 'Цвет: ' + item.color : (item.note || '')"></p>
 
                     <div class="flex items-center justify-between">
                       <!-- Степпер количества -->
                       <div class="flex items-center border border-border-strong rounded-sm">
-                        <button @click="$store.cart.setQty(item.sku, item.qty - 1)"
+                        <button @click="$store.cart.setQty(item.key, item.qty - 1)"
                                 class="w-[26px] h-[26px] flex items-center justify-center text-[15px] font-semibold text-primary hover:text-accent transition-colors">
                           −
                         </button>
                         <span class="w-7 text-center text-[12px] font-semibold text-primary"
                               x-text="item.qty"></span>
-                        <button @click="$store.cart.setQty(item.sku, item.qty + 1)"
+                        <button @click="$store.cart.setQty(item.key, item.qty + 1)"
                                 class="w-[26px] h-[26px] flex items-center justify-center text-[15px] font-semibold text-primary hover:text-accent transition-colors">
                           +
                         </button>
                       </div>
-                      <!-- Сумма по позиции -->
-                      <p class="text-[14px] font-bold text-primary"
-                         x-text="(parseFloat(item.price) * item.qty).toLocaleString('ru-RU') + ' ₽'"></p>
+                      <!-- Цена — по запросу -->
+                      <p class="text-[11px] font-medium text-muted">Цена по запросу</p>
                     </div>
                   </div>
 
                   <!-- Удалить -->
-                  <button @click="$store.cart.remove(item.sku)"
+                  <button @click="$store.cart.remove(item.key)"
                           class="text-muted/40 hover:text-muted transition-colors self-start mt-1 shrink-0">
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
                       <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m2 0v14a2 2 0 01-2 2H8a2 2 0 01-2-2V6"
@@ -116,13 +117,11 @@
               </template>
             </div>
 
-            <!-- Итого + кнопка -->
+            <!-- Кнопка оформления -->
             <div class="px-6 py-5 border-t border-border shrink-0">
-              <div class="flex items-center justify-between mb-4">
-                <span class="text-[13px] text-muted">Итого</span>
-                <span class="text-[20px] font-black text-primary"
-                      x-text="$store.cart.total.toLocaleString('ru-RU') + ' ₽'"></span>
-              </div>
+              <p class="text-[11.5px] text-muted leading-relaxed mb-3.5">
+                Стоимость рассчитает менеджер и свяжется с вами для подтверждения
+              </p>
               <button @click="$store.cartUI.view = 'form'" class="btn-accent w-full">
                 Оформить заявку
               </button>
@@ -152,7 +151,7 @@
 
           <!-- Сводка корзины -->
           <div class="bg-surface-alt rounded-sm px-[14px] py-3 mb-[22px] text-[12.5px] font-medium text-primary leading-relaxed"
-               x-text="$store.cart.count + ' ' + qtyLabel($store.cart.count) + ' на сумму ' + $store.cart.total.toLocaleString('ru-RU') + ' ₽'">
+               x-text="$store.cart.count + ' ' + qtyLabel($store.cart.count) + ' в заявке · цену рассчитает менеджер'">
           </div>
 
           <!-- Имя -->

@@ -8,6 +8,8 @@
 {% block extra_head %}
 {{ variants_json|json_script:"variants-data" }}
 {{ combinations_json|json_script:"combinations-data" }}
+{{ finish_colors_json|json_script:"finish-colors-data" }}
+{{ color_images_json|json_script:"color-images-data" }}
 {% endblock %}
 
 {% block content %}
@@ -35,11 +37,11 @@
     <!-- ─── Изображения ─── -->
     <div>
       <div class="relative rounded-md overflow-hidden bg-surface-alt h-[420px]">
-        <template x-if="current && current.image_url">
-          <img :src="current.image_url" :alt="'{{ product.name|escapejs }}'"
+        <template x-if="displayImage">
+          <img :src="displayImage" :alt="'{{ product.name|escapejs }}'"
                class="w-full h-full object-cover">
         </template>
-        <template x-if="!current || !current.image_url">
+        <template x-if="!displayImage">
           {% if images %}
             <img src="{{ images.0.gallery.url }}" alt="{{ product.name }}"
                  class="w-full h-full object-cover">
@@ -52,7 +54,7 @@
 
         <!-- Подпись поверх фото -->
         <div class="absolute bottom-3 left-3 right-3 text-[10px] font-mono text-muted pointer-events-none">
-          <span x-text="current ? (current.material_name + (current.finish_name ? ' · ' + current.finish_name : '') + (current.length_m ? ' · ' + current.length_m + ' м' : '')) : ''"></span>
+          <span x-text="photoCaption"></span>
         </div>
       </div>
 
@@ -60,9 +62,9 @@
       {% if images|length > 1 %}
       <div class="flex gap-2 mt-2.5">
         {% for img in images %}
-          <button @click="setImage('{{ img.card.url }}')"
+          <button @click="setImage('{{ img.gallery.url }}')"
                   class="w-16 h-16 rounded-sm overflow-hidden border-2 transition-colors flex-shrink-0"
-                  :class="activeThumb === '{{ img.card.url }}' ? 'border-accent' : 'border-border'">
+                  :class="activeThumb === '{{ img.gallery.url }}' ? 'border-accent' : 'border-border'">
             <img src="{{ img.thumb.url }}" alt="" class="w-full h-full object-cover">
           </button>
         {% endfor %}
@@ -79,13 +81,14 @@
         <p class="text-[12px] text-muted" x-text="current ? 'Арт. ' + current.sku : ''"></p>
       </div>
 
-      <!-- Цена -->
+      <!-- Цена по запросу -->
       <div>
         <div class="flex items-baseline gap-2.5">
-          <span class="text-[34px] font-black text-primary leading-none"
-                x-text="current ? parseFloat(current.price).toLocaleString('ru-RU') + ' ₽' : '—'"></span>
-          <span class="text-[13px] text-muted" x-text="current ? current.unit_display : ''"></span>
+          <span class="text-[22px] font-black text-primary leading-none">Цена по запросу</span>
         </div>
+        <p class="text-[12px] text-muted mt-1.5">
+          Точную стоимость рассчитает менеджер после отправки заявки
+        </p>
         <span class="inline-block mt-1.5 text-[11px] font-medium px-2 py-0.5 rounded-sm"
               :class="{
                 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400': current && current.in_stock === 'in_stock',
@@ -138,8 +141,8 @@
         </div>
       </template>
 
-      <!-- Подпись «Не окрашивается» — только когда есть несколько материалов,
-           но у текущего выбранного нет ни одного цветного варианта -->
+      <!-- Подпись «Не окрашивается» — когда есть несколько материалов,
+           но ни одна обработка выбранного материала не имеет палитры -->
       <template x-if="uniqueMaterials.length > 1 && !currentMaterialHasColors">
         <p class="text-[12px] text-muted italic">Этот материал не окрашивается</p>
       </template>
@@ -148,16 +151,15 @@
       <template x-if="uniqueColors.length > 0 && colorUiMode === 'swatches'">
         <div>
           <p class="text-[12px] font-semibold text-primary mb-2.5">
-            Цвет / отделка: <span class="font-normal text-muted" x-text="current && current.color_name ? current.color_name : ''"></span>
+            Цвет / отделка: <span class="font-normal text-muted" x-text="selectedColorName"></span>
           </p>
           <div class="flex flex-wrap gap-3">
             <template x-for="c in uniqueColors" :key="c.id">
               <button
                 @click="selectColor(c.id)"
-                :disabled="!isValid('color_id', c.id)"
                 :title="c.name"
-                class="w-[34px] h-[34px] rounded-full transition-all disabled:opacity-30 disabled:cursor-not-allowed"
-                :style="swatchStyle(c.hex, sel.color_id === c.id)">
+                class="w-[34px] h-[34px] rounded-full transition-all"
+                :style="swatchStyle(c.hex, selColor === c.id)">
               </button>
             </template>
           </div>
@@ -168,17 +170,16 @@
       <template x-if="uniqueColors.length > 0 && colorUiMode === 'ral_palette'">
         <div>
           <p class="text-[12px] font-semibold text-primary mb-2.5">
-            Цвет / отделка: <span class="font-normal text-muted" x-text="current && current.color_name ? current.color_name : ''"></span>
+            Цвет / отделка: <span class="font-normal text-muted" x-text="selectedColorName"></span>
           </p>
           <!-- 5 популярных свотчей -->
           <div class="flex gap-3 items-center mb-2.5">
             <template x-for="c in popularColors" :key="c.id">
               <button
                 @click="selectColor(c.id)"
-                :disabled="!isValid('color_id', c.id)"
                 :title="c.name"
-                class="w-[34px] h-[34px] rounded-full transition-all disabled:opacity-30 disabled:cursor-not-allowed flex-shrink-0"
-                :style="swatchStyle(c.hex, sel.color_id === c.id)">
+                class="w-[34px] h-[34px] rounded-full transition-all flex-shrink-0"
+                :style="swatchStyle(c.hex, selColor === c.id)">
               </button>
             </template>
           </div>
@@ -211,9 +212,8 @@
             <div class="grid grid-cols-4 gap-2 max-h-[200px] overflow-y-auto">
               <template x-for="c in filteredColors" :key="c.id">
                 <button @click="selectColor(c.id); ralOpen = false"
-                        :disabled="!isValid('color_id', c.id)"
-                        :class="sel.color_id === c.id ? 'bg-[rgba(184,137,58,0.12)] shadow-[0_0_0_1.5px_var(--color-accent)]' : 'hover:bg-surface'"
-                        class="text-center cursor-pointer p-1.5 rounded transition-all disabled:opacity-30"
+                        :class="selColor === c.id ? 'bg-[rgba(184,137,58,0.12)] shadow-[0_0_0_1.5px_var(--color-accent)]' : 'hover:bg-surface'"
+                        class="text-center cursor-pointer p-1.5 rounded transition-all"
                         :title="c.name">
                   <div class="w-[30px] h-[30px] rounded-full mx-auto mb-1"
                        :style="'background:' + (c.hex || 'var(--color-border)') + '; box-shadow:inset 0 0 0 1px rgba(0,0,0,.1)'">
@@ -235,17 +235,16 @@
       <template x-if="uniqueColors.length > 0 && colorUiMode === 'custom_request'">
         <div>
           <p class="text-[12px] font-semibold text-primary mb-2.5">
-            Цвет / отделка: <span class="font-normal text-muted" x-text="current && current.color_name ? current.color_name : ''"></span>
+            Цвет / отделка: <span class="font-normal text-muted" x-text="selectedColorName"></span>
           </p>
           <!-- 5 популярных свотчей + кнопка «Свой цвет» -->
           <div class="flex gap-3 items-center flex-wrap mb-2.5">
             <template x-for="c in popularColors" :key="c.id">
               <button
                 @click="selectColor(c.id)"
-                :disabled="!isValid('color_id', c.id)"
                 :title="c.name"
-                class="w-[34px] h-[34px] rounded-full transition-all disabled:opacity-30 disabled:cursor-not-allowed flex-shrink-0"
-                :style="swatchStyle(c.hex, sel.color_id === c.id)">
+                class="w-[34px] h-[34px] rounded-full transition-all flex-shrink-0"
+                :style="swatchStyle(c.hex, selColor === c.id)">
               </button>
             </template>
             <button @click="customOpen = !customOpen; customSubmitted = false"
@@ -258,7 +257,7 @@
           <div x-show="customOpen" x-cloak
                class="bg-surface-alt rounded-md p-3.5 mb-2">
             <p class="text-[12px] text-muted leading-relaxed mb-2.5">
-              Опишите нужный цвет (название, RAL-код или образец) — менеджер подтвердит наличие и цену
+              Опишите нужный цвет (название, RAL-код или образец) — менеджер подтвердит возможность окраски
             </p>
             <div class="flex gap-2">
               <input x-model="customText" type="text"
@@ -316,7 +315,7 @@
           В корзину
         </button>
         <button @click="$store.callbackUI.openModal()" class="btn-outline flex-1">
-          Связаться с менеджером
+          Узнать цену у менеджера
         </button>
       </div>
 
@@ -336,7 +335,10 @@ function productVariants() {
   return {
     variants:     [],
     combinations: [],
-    sel: { material_id: null, steel_grade_id: null, finish_id: null, color_id: null, length_m: null },
+    finishColors: {},   // {finish_id: [{id, name, hex, ral_code, group}]}
+    colorImages:  {},   // {"color:<id>"|"group:<key>": {card, gallery}}
+    sel: { material_id: null, steel_grade_id: null, finish_id: null, length_m: null },
+    selColor:     null, // цвет — параметр заказа, в комбинации вариантов не входит
     current:      null,
     activeThumb:  null,
 
@@ -354,19 +356,43 @@ function productVariants() {
     init() {
       this.variants     = JSON.parse(document.getElementById('variants-data').textContent);
       this.combinations = JSON.parse(document.getElementById('combinations-data').textContent);
+      this.finishColors = JSON.parse(document.getElementById('finish-colors-data').textContent);
+      this.colorImages  = JSON.parse(document.getElementById('color-images-data').textContent);
       if (!this.variants.length) return;
 
-      const sku = new URLSearchParams(location.search).get('sku');
+      const params = new URLSearchParams(location.search);
+      const sku = params.get('sku');
       const v   = sku ? this.variants.find(v => v.sku === sku) : null;
       // При первичной инициализации — replaceState, чтобы не создавать лишнюю запись
       this._pickVariant(v || this.variants[0], /*replace=*/true);
 
+      const colorId = parseInt(params.get('color'), 10);
+      if (colorId && this.uniqueColors.some(c => c.id === colorId)) {
+        this.selColor = colorId;
+      }
+
+      // Предзагрузка фото цветов, чтобы переключение не мигало
+      Object.values(this.colorImages).forEach(u => {
+        if (u.gallery) { const img = new Image(); img.src = u.gallery; }
+      });
+
       // Реакция на back/forward — переставить вариант по sku из URL
       window.addEventListener('popstate', () => {
-        const s = new URLSearchParams(location.search).get('sku');
+        const p = new URLSearchParams(location.search);
+        const s = p.get('sku');
         const found = s ? this.variants.find(x => x.sku === s) : null;
         if (found) this._pickVariant(found, /*replace=*/true);
+        const c = parseInt(p.get('color'), 10);
+        this.selColor = (c && this.uniqueColors.some(x => x.id === c)) ? c : null;
       });
+    },
+
+    _syncUrl(replace = false) {
+      if (!this.current) return;
+      let url = '?sku=' + encodeURIComponent(this.current.sku);
+      if (this.selColor) url += '&color=' + this.selColor;
+      if (replace) history.replaceState({}, '', url);
+      else         history.pushState({}, '', url);
     },
 
     _pickVariant(v, replace = false) {
@@ -375,26 +401,21 @@ function productVariants() {
         material_id:    v.material_id,
         steel_grade_id: v.steel_grade_id,
         finish_id:      v.finish_id,
-        color_id:       v.color_id,
         length_m:       v.length_m,
       };
-      this.current    = v;
-      this.activeThumb = v.image_url;
-      const url = '?sku=' + encodeURIComponent(v.sku);
-      if (replace) history.replaceState({}, '', url);
-      else         history.pushState({}, '', url);
+      this.current = v;
+      this._syncUrl(replace);
     },
 
     _autoSelect() {
       // Ищем вариант, максимально совпадающий с sel.
       // Если точного матча нет — постепенно ослабляем ограничения снизу вверх
-      // (сначала отбрасываем length, потом color, потом finish, потом steel_grade).
+      // (сначала отбрасываем length, потом finish, потом steel_grade).
       const s = this.sel;
       const constraints = [
         v => s.material_id    == null || v.material_id    === s.material_id,
         v => s.steel_grade_id == null || v.steel_grade_id === s.steel_grade_id,
         v => s.finish_id      == null || v.finish_id      === s.finish_id,
-        v => s.color_id       == null || v.color_id       === s.color_id,
         v => s.length_m       == null || v.length_m       === s.length_m,
       ];
       for (let drop = 0; drop <= constraints.length; drop++) {
@@ -405,7 +426,8 @@ function productVariants() {
     },
 
     selectMaterial(id) {
-      this.sel = { material_id: id, steel_grade_id: null, finish_id: null, color_id: null, length_m: null };
+      this.sel = { material_id: id, steel_grade_id: null, finish_id: null, length_m: null };
+      this.selColor = null;
       this.ralOpen = false;
       this.customOpen = false;
       this.customSubmitted = false;
@@ -413,17 +435,17 @@ function productVariants() {
     },
     selectFinish(id) {
       this.sel.finish_id = id;
-      this.sel.color_id  = null;
       this.sel.length_m  = null;
+      this.selColor = null;
       this.ralOpen = false;
       this.customOpen = false;
       this.customSubmitted = false;
       this._autoSelect();
     },
     selectColor(id) {
-      this.sel.color_id = id;
+      this.selColor = (this.selColor === id) ? null : id;
       this.ralOpen = false;
-      this._autoSelect();
+      this._syncUrl();
     },
     selectLength(len) {
       this.sel.length_m = len;
@@ -431,7 +453,7 @@ function productVariants() {
     },
     setImage(url) {
       this.activeThumb = url;
-      if (this.current) this.current = { ...this.current, image_url: url };
+      this.selColor = null; // ручной выбор фото сбрасывает цветовое
     },
 
     submitCustomColor() {
@@ -464,10 +486,36 @@ function productVariants() {
         if (field !== 'material_id'    && s.material_id    != null && c.material_id    !== s.material_id)    return false;
         if (field !== 'steel_grade_id' && s.steel_grade_id != null && c.steel_grade_id !== s.steel_grade_id) return false;
         if (field !== 'finish_id'      && s.finish_id      != null && c.finish_id      !== s.finish_id)      return false;
-        if (field !== 'color_id'       && s.color_id       != null && c.color_id       !== s.color_id)       return false;
         if (field !== 'length_m'       && s.length_m       != null && c.length_m       !== s.length_m)       return false;
         return true;
       });
+    },
+
+    // ── Картинка: точный цвет → группа цвета → активная миниатюра → дефолт ──
+    get displayImage() {
+      if (this.selColor) {
+        const c     = this.uniqueColors.find(x => x.id === this.selColor);
+        const exact = this.colorImages['color:' + this.selColor];
+        const grp   = c && c.group ? this.colorImages['group:' + c.group] : null;
+        const hit   = exact || grp;
+        if (hit && hit.gallery) return hit.gallery;
+      }
+      return this.activeThumb;
+    },
+
+    get photoCaption() {
+      if (!this.current) return '';
+      const parts = [this.current.material_name];
+      if (this.current.finish_name) parts.push(this.current.finish_name);
+      if (this.selectedColorName)   parts.push(this.selectedColorName);
+      if (this.current.length_m)    parts.push(this.current.length_m + ' м');
+      return parts.join(' · ');
+    },
+
+    get selectedColorName() {
+      if (this.customSubmitted && this.customLastText) return this.customLastText;
+      const c = this.uniqueColors.find(x => x.id === this.selColor);
+      return c ? c.name : '';
     },
 
     get colorUiMode() {
@@ -480,7 +528,9 @@ function productVariants() {
 
     get currentMaterialHasColors() {
       return this.variants.some(v =>
-        v.material_id === this.sel.material_id && v.color_id !== null
+        v.material_id === this.sel.material_id &&
+        v.finish_id &&
+        (this.finishColors[v.finish_id] || []).length > 0
       );
     },
 
@@ -502,22 +552,9 @@ function productVariants() {
         .map(v => ({ id: v.material_id, name: v.material_name }));
     },
 
+    // Палитра выбранной обработки (из FinishColor, не из вариантов)
     get uniqueColors() {
-      const seen = {};
-      return this.variants
-        .filter(v =>
-          v.color_id &&
-          (this.sel.material_id == null || v.material_id === this.sel.material_id) &&
-          (this.sel.finish_id   == null || v.finish_id   === this.sel.finish_id)   &&
-          !seen[v.color_id] && (seen[v.color_id] = true)
-        )
-        .map(v => ({
-          id:       v.color_id,
-          name:     v.color_name,
-          hex:      v.color_hex,
-          ral_code: v.color_ral_code || '',
-          group:    v.color_group    || '',
-        }));
+      return this.finishColors[this.sel.finish_id] || [];
     },
 
     get popularColors() {
@@ -567,11 +604,12 @@ function productVariants() {
         slug:  '{{ product.slug }}',
         sku:   v.sku,
         qty:   1,
-        price: v.price,
         unit:  v.unit_display,
+        color: this.selectedColorName || null,
       };
       if (this.customSubmitted && this.customLastText) {
-        item.note = 'Цвет: ' + this.customLastText;
+        item.color = null;
+        item.note  = 'Цвет: ' + this.customLastText;
       }
       this.$store.cart.add(item);
     },

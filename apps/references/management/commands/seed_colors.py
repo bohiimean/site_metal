@@ -208,44 +208,19 @@ class Command(BaseCommand):
 
         self.stdout.write('  Добавляю тестовые варианты к «Профиль Г-образный 30×30×2»…')
 
-        def make(sku, finish, color, price):
+        # Цвет — не вариант, а параметр заказа: по одному варианту на обработку.
+        # Палитра каждой обработки задаётся через FinishColor (см. выше).
+        def make(sku, finish):
             if not ProductVariant.objects.filter(sku=sku).exists():
                 ProductVariant.objects.create(
                     product=product, sku=sku,
                     material=nerzh, steel_grade=grade,
-                    finish=finish, color=color,
-                    price=price, unit='m', length_m=3,
+                    finish=finish, unit='m', length_m=3,
                     in_stock='in_stock',
                 )
 
-        # swatches — один вариант на каждый цвет
-        for name, price in [
-            ('Натуральный', 890), ('Золото', 1050), ('Шампань', 1020),
-            ('Чёрный никель', 980), ('Медь', 1100), ('Розовое золото', 1130),
-        ]:
-            if name in swatches_colors:
-                safe = name.lower().replace(' ', '-').replace('ё', 'e')
-                make(f'G-30-POL-{safe}', pol, swatches_colors[name], price)
-
-        # ral_palette — 5 репрезентативных RAL-вариантов
-        for name, price in [
-            ('Чёрный',           1200),
-            ('Белый сигнальный', 1150),
-            ('Зелёный мох',      1180),
-            ('Синий сигнальный', 1170),
-            ('Бронза',           1220),
-        ]:
-            if name in ral_colors:
-                safe = name.lower().replace(' ', '-').replace('ё', 'e')
-                make(f'G-30-RAL-{safe}', ral, ral_colors[name], price)
-
-        # custom_request — 5 популярных
-        for name, price in [
-            ('Натуральный', 890), ('Золото', 1050), ('Шампань', 1020),
-            ('Чёрный никель', 980), ('Медь', 1100),
-        ]:
-            if name in swatches_colors:
-                safe = name.lower().replace(' ', '-').replace('ё', 'e')
-                make(f'G-30-CUST-{safe}', cust, swatches_colors[name], price)
+        make('G-30-POL',  pol)   # swatches
+        make('G-30-RAL',  ral)   # ral_palette
+        make('G-30-CUST', cust)  # custom_request
 
         self.stdout.write('  Готово. Варианты созданы.')

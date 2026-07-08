@@ -17,7 +17,7 @@ class Lead(models.Model):
     comment = models.TextField('Комментарий', blank=True)
     cart_snapshot = models.JSONField(
         'Состав корзины', default=list, blank=True,
-        help_text='Слепок корзины на момент отправки: [{name, sku, qty, price, unit}]',
+        help_text='Слепок корзины на момент отправки: [{name, sku, qty, unit, color, note}]',
     )
     source = models.CharField(
         'Источник', max_length=20,
