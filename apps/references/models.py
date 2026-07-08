@@ -1,10 +1,28 @@
 from django.db import models
+from imagekit.models import ImageSpecField
+from imagekit.processors import ResizeToFill
 
 
 class Material(models.Model):
     name = models.CharField('Название', max_length=100)
     slug = models.SlugField('Slug', max_length=100, unique=True)
+    landing_title = models.CharField(
+        'Заголовок на странице «Продукция»', max_length=200, blank=True,
+        help_text='Например «Изделия из нержавеющей стали». '
+                  'Пусто — материал не показывается основным разделом.',
+    )
+    image = models.ImageField(
+        'Изображение', upload_to='materials/', blank=True,
+        help_text='Для карточки основного раздела на странице «Продукция»',
+    )
     is_active = models.BooleanField('Активен', default=True)
+
+    card = ImageSpecField(
+        source='image',
+        processors=[ResizeToFill(800, 450)],
+        format='WEBP',
+        options={'quality': 85},
+    )
 
     class Meta:
         verbose_name = 'Материал'

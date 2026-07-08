@@ -17,10 +17,19 @@ from .models import Category, Product, ProductImage, ProductColorImage, ProductV
 @admin.register(Category)
 class CategoryAdmin(TreeAdmin):
     form = movenodeform_factory(Category)
-    list_display = ['name', 'slug', 'is_active']
+    list_display = ['name', 'slug', 'image_preview', 'is_active']
     list_editable = ['is_active']
     prepopulated_fields = {'slug': ('name',)}
     search_fields = ['name', 'slug']
+
+    def image_preview(self, obj):
+        if obj.image:
+            try:
+                return format_html('<img src="{}" style="height:40px;">', obj.card.url)
+            except Exception:
+                pass
+        return '—'
+    image_preview.short_description = 'Картинка'
 
 
 class ProductImageInline(SortableInlineAdminMixin, admin.TabularInline):

@@ -78,6 +78,20 @@ def search_view(request):
     return render(request, 'catalog/search.html', ctx)
 
 
+def products_index(request):
+    """Страница «Продукция»: основные разделы (материалы) + категории карточками."""
+    main_sections = (
+        Material.objects
+        .filter(is_active=True)
+        .exclude(landing_title='')
+    )
+    categories = Category.get_root_nodes().filter(is_active=True)
+    return render(request, 'catalog/products_index.html', {
+        'main_sections': main_sections,
+        'categories': categories,
+    })
+
+
 def catalog_index(request):
     return _render_catalog(request, category=None)
 

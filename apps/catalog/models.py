@@ -10,12 +10,24 @@ from apps.references.models import Material, SteelGrade, Finish, Color
 class Category(MP_Node):
     name = models.CharField('Название', max_length=200)
     slug = models.SlugField('Slug', max_length=200, unique=True)
+    image = models.ImageField(
+        'Изображение', upload_to='categories/', blank=True,
+        help_text='Для карточки на странице «Продукция»',
+    )
     seo_title = models.CharField('SEO Title', max_length=200, blank=True)
     seo_description = models.TextField('SEO Description', blank=True)
     h1 = models.CharField('H1', max_length=200, blank=True)
     is_active = models.BooleanField('Активна', default=True)
 
-    node_order_by = ['name']
+    card = ImageSpecField(
+        source='image',
+        processors=[ResizeToFill(600, 450)],
+        format='WEBP',
+        options={'quality': 85},
+    )
+
+    # node_order_by не задаём намеренно: порядок категорий ручной
+    # (drag в TreeAdmin) — он определяет порядок карточек на «Продукции»
 
     class Meta:
         verbose_name = 'Категория'

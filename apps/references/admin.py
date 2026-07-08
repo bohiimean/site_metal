@@ -9,7 +9,7 @@ from .widgets import GroupedColorCheckboxWidget
 
 @admin.register(Material)
 class MaterialAdmin(admin.ModelAdmin):
-    list_display = ['name', 'slug', 'is_active']
+    list_display = ['name', 'slug', 'landing_title', 'is_active']
     list_editable = ['is_active']
     prepopulated_fields = {'slug': ('name',)}
     search_fields = ['name']

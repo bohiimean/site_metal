@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Продукция — МЕТАПРОФ{% endblock %}
+{% block meta_description %}Каталог продукции МЕТАПРОФ: профиль для напольных покрытий, плинтусы, пороги, защита ступеней и углов из нержавеющей стали и латуни.{% endblock %}
+{% block canonical %}<link rel="canonical" href="{{ request.scheme }}://{{ request.get_host }}{{ request.path }}">{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-6 lg:px-12 py-6">
+
+  <!-- Хлебные крошки -->
+  <nav class="text-[11px] text-muted mb-4 flex items-center gap-1.5">
+    <a href="/" class="hover:text-accent transition-colors">Главная</a>
+    <span>/</span>
+    <span class="text-primary">Продукция</span>
+  </nav>
+
+  <h1 class="text-[24px] font-bold text-primary mb-6">Продукция</h1>
+
+  <!-- ─── Основные разделы (материалы) ─── -->
+  {% if main_sections %}
+  <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-14">
+    {% for m in main_sections %}
+      <a href="{% url 'catalog:index' %}?material={{ m.pk }}"
+         class="group relative rounded-md overflow-hidden bg-surface-alt block"
+         style="aspect-ratio:16/7">
+        {% if m.image %}
+          <img src="{{ m.card.url }}" alt="{{ m.landing_title }}"
+               class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+               loading="lazy">
+          <div class="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent"></div>
+        {% else %}
+          <div class="img-placeholder w-full h-full"></div>
+          <div class="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent"></div>
+        {% endif %}
+        <div class="absolute bottom-0 left-0 right-0 p-5">
+          <span class="text-[17px] font-bold text-white leading-snug group-hover:underline underline-offset-4">{{ m.landing_title }}</span>
+        </div>
+      </a>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <!-- ─── Разделы каталога ─── -->
+  <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+    {% for cat in categories %}
+      <a href="{% url 'catalog:detail' cat.slug %}" class="product-card group block">
+        <div class="relative overflow-hidden" style="aspect-ratio:4/3">
+          {% if cat.image %}
+            <img src="{{ cat.card.url }}" alt="{{ cat.name }}"
+                 class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.04]"
+                 loading="lazy">
+          {% else %}
+            <div class="img-placeholder w-full h-full text-center px-3">{{ cat.name }}</div>
+          {% endif %}
+        </div>
+        <div class="p-[13px]">
+          <p class="text-[13px] font-semibold text-primary leading-snug group-hover:text-accent transition-colors">
+            {{ cat.name }}
+          </p>
+        </div>
+      </a>
+    {% empty %}
+      <p class="col-span-full text-[13px] text-muted py-10 text-center">Разделы пока не добавлены</p>
+    {% endfor %}
+  </div>
+
+</div>
+{% endblock %}

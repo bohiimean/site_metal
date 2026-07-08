@@ -76,6 +76,12 @@ class Command(BaseCommand):
         latun, _      = Material.objects.get_or_create(name='Латунь',       defaults={'slug': 'latun'})
         alyum, _      = Material.objects.get_or_create(name='Алюминий',     defaults={'slug': 'alyuminiy'})
 
+        # Основные разделы страницы «Продукция»
+        Material.objects.filter(pk=nerzh.pk, landing_title='').update(
+            landing_title='Изделия из нержавеющей стали')
+        Material.objects.filter(pk=latun.pk, landing_title='').update(
+            landing_title='Профиль из латуни')
+
         # Марки стали
         grades = {}
         for name, mat in [
@@ -140,45 +146,42 @@ class Command(BaseCommand):
             except Category.DoesNotExist:
                 return Category.add_root(name=name, slug=slug, **kw)
 
-        def get_or_create_child(parent, name, slug, **kw):
-            try:
-                return Category.objects.get(slug=slug)
-            except Category.DoesNotExist:
-                return parent.add_child(name=name, slug=slug, **kw)
+        # Структура страницы «Продукция»: плоский список типов изделий.
+        # Материал (нержавейка/латунь) — не категория, а фильтр каталога.
+        structure = [
+            ('napolnye',   'Профиль для напольных покрытий', 'profil-dlya-napolnyh-pokrytij'),
+            ('plintus',    'Плинтус',                        'plintus'),
+            ('porog',      'Порог стыковочный',              'porog-stykovochnyj'),
+            ('stupeni',    'Профиль для защиты ступеней',    'profil-dlya-zashchity-stupenej'),
+            ('vnutr_ugly', 'Профиль для внутренних углов',   'profil-dlya-vnutrennih-uglov'),
+            ('vnesh_ugly', 'Профиль для внешних углов',      'profil-dlya-vneshnih-uglov'),
+            ('vstavka',    'Вставка декоративная',           'vstavka-dekorativnaya'),
+            ('otbojnik',   'Отбойник для стен',              'otbojnik-dlya-sten'),
+            ('zerkalo',    'Профиль для зеркала и стекла',   'profil-dlya-zerkala-i-stekla'),
+            ('shov',       'Шов деформационный',             'shov-deformacionnyj'),
+        ]
+        cats = {}
+        for key, name, slug in structure:
+            cats[key] = get_or_create_root(
+                name, slug,
+                h1=name,
+                seo_title=f'{name} — купить оптом | МЕТАПРОФ',
+                seo_description=f'{name} из нержавеющей стали и латуни. Доставка по Москве, резка в размер.',
+            )
 
-        profil = get_or_create_root(
-            'Профиль стальной', 'profil-stalnoj',
-            h1='Стальной профиль оптом', seo_title='Стальной профиль — купить оптом | МЕТАПРОФ',
-            seo_description='Широкий выбор стального профиля: П-образный, Г-образный, Т-образный. Доставка по Москве.',
-        )
-        list_met = get_or_create_root(
-            'Листовой металл', 'listovoj-metall',
-            h1='Листовой металл оптом', seo_title='Листовой металл — купить оптом | МЕТАПРОФ',
-            seo_description='Стальной, нержавеющий и латунный лист. Резка в размер.',
-        )
-        latun_cat = get_or_create_root(
-            'Латунные изделия', 'latunn-izdeliya',
-            h1='Латунные изделия оптом',
-        )
-        nerzh_cat = get_or_create_root(
-            'Нержавейка', 'nerzhaveika',
-            h1='Нержавеющая сталь оптом',
-        )
-        krepezh = get_or_create_root(
-            'Крепёж и фитинги', 'krepezh-i-fitingi',
-            h1='Крепёж из нержавейки и стали',
-        )
-
-        p_obr  = get_or_create_child(profil, 'П-образный профиль', 'p-obraznyj-profil')
-        g_obr  = get_or_create_child(profil, 'Г-образный профиль', 'g-obraznyj-profil')
-        t_obr  = get_or_create_child(profil, 'Т-образный профиль', 't-obraznyj-profil')
-
-        return {
-            'profil': profil, 'list_met': list_met,
-            'latun_cat': latun_cat, 'nerzh_cat': nerzh_cat,
-            'krepezh': krepezh,
-            'p_obr': p_obr, 'g_obr': g_obr, 't_obr': t_obr,
-        }
+        # Легаси-ключи для _seed_products/_seed_home_blocks — демо-товары
+        # раскладываются по новым категориям
+        cats.update({
+            'profil':    cats['napolnye'],
+            'p_obr':     cats['napolnye'],
+            'g_obr':     cats['vnesh_ugly'],
+            't_obr':     cats['porog'],
+            'list_met':  cats['otbojnik'],
+            'nerzh_cat': cats['stupeni'],
+            'latun_cat': cats['plintus'],
+            'krepezh':   cats['shov'],
+        })
+        return cats
 
     # ──────────────────────────────────────────
     # ТОВАРЫ
@@ -503,10 +506,10 @@ class Command(BaseCommand):
 
         # Блоки по категориям
         blocks_data = [
-            ('Профиль стальной', 'profil-stalnoj', 'Весь раздел →', '/catalog/profil-stalnoj/', 20),
-            ('Листовой металл',  'listovoj-metall', 'Весь раздел →', '/catalog/listovoj-metall/', 30),
-            ('Латунные изделия', 'latunn-izdeliya', 'Весь раздел →', '/catalog/latunn-izdeliya/', 40),
-            ('Нержавейка',       'nerzhaveika',     'Весь раздел →', '/catalog/nerzhaveika/', 50),
+            ('Профиль для напольных покрытий', 'profil-dlya-napolnyh-pokrytij',  'Весь раздел →', '/catalog/profil-dlya-napolnyh-pokrytij/', 20),
+            ('Плинтус',                        'plintus',                        'Весь раздел →', '/catalog/plintus/', 30),
+            ('Профиль для защиты ступеней',    'profil-dlya-zashchity-stupenej', 'Весь раздел →', '/catalog/profil-dlya-zashchity-stupenej/', 40),
+            ('Отбойник для стен',              'otbojnik-dlya-sten',             'Весь раздел →', '/catalog/otbojnik-dlya-sten/', 50),
         ]
         for title, cat_slug, link_text, link_url, order in blocks_data:
             try:

@@ -8,6 +8,7 @@ from apps.catalog import views as catalog_views
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('search/', catalog_views.search_view, name='search'),
+    path('produkciya/', catalog_views.products_index, name='products'),
     path('catalog/', include('apps.catalog.urls', namespace='catalog')),
     path('', include('apps.leads.urls', namespace='leads')),
     path('', include('apps.home.urls')),
