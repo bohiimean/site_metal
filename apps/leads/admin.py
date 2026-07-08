@@ -65,6 +65,10 @@ class LeadAdmin(admin.ModelAdmin):
                 extras.append(format_html(
                     '<span style="color:#555">🎨 {}</span>', item['color'],
                 ))
+            if item.get('length'):
+                extras.append(format_html(
+                    '<span style="color:#555">📏 своя длина: {}</span>', item['length'],
+                ))
             if item.get('note'):
                 extras.append(format_html(
                     '<span style="color:#666">💬 {}</span>', item['note'],

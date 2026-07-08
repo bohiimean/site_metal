@@ -266,6 +266,11 @@ class ProductVariant(models.Model):
         'Длина, м', max_digits=8, decimal_places=2,
         null=True, blank=True,
     )
+    allow_custom_length = models.BooleanField(
+        'Своя длина', default=False,
+        help_text='На карточке товара появится поле «Своя длина» — '
+                  'клиент укажет нужную длину, она уйдёт в заявку',
+    )
     unit = models.CharField('Единица измерения', max_length=10, choices=UNIT_CHOICES, default='m')
     in_stock = models.CharField(
         'Наличие', max_length=20,

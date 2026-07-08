@@ -283,10 +283,10 @@
       </template>
 
       <!-- Длина -->
-      <template x-if="uniqueLengths.length > 0">
+      <template x-if="uniqueLengths.length > 0 || customLengthAvailable">
         <div>
           <p class="text-[12px] font-semibold text-primary mb-2.5">
-            Длина: <span class="font-normal text-muted" x-text="current && current.length_m ? current.length_m + ' м' : ''"></span>
+            Длина: <span class="font-normal text-muted" x-text="lengthLabel"></span>
           </p>
           <div class="flex flex-wrap gap-2">
             <template x-for="len in uniqueLengths" :key="len">
@@ -294,14 +294,31 @@
                 @click="selectLength(len)"
                 :disabled="!isValid('length_m', len)"
                 :class="{
-                  'bg-accent text-accent-fg border-accent': sel.length_m === len,
-                  'bg-surface text-primary border-border-strong hover:border-accent': sel.length_m !== len,
+                  'bg-accent text-accent-fg border-accent': !customLenActive && sel.length_m === len,
+                  'bg-surface text-primary border-border-strong hover:border-accent': customLenActive || sel.length_m !== len,
                   'opacity-30 cursor-not-allowed': !isValid('length_m', len)
                 }"
                 class="px-4 py-[9px] text-[12px] font-semibold border rounded-sm transition-colors"
                 x-text="len + ' м'">
               </button>
             </template>
+            <template x-if="customLengthAvailable">
+              <button
+                @click="activateCustomLength()"
+                :class="customLenActive
+                  ? 'bg-accent text-accent-fg border-accent'
+                  : 'bg-surface text-accent border-dashed border-accent hover:bg-surface-alt'"
+                class="px-4 py-[9px] text-[12px] font-semibold border rounded-sm transition-colors">
+                Своя длина
+              </button>
+            </template>
+          </div>
+          <!-- Поле своей длины -->
+          <div x-show="customLenActive" x-cloak class="mt-2.5 flex items-center gap-2">
+            <input type="number" step="0.1" min="0.1" x-model="customLen"
+                   placeholder="Например: 2.7"
+                   class="w-[130px] border border-border-strong rounded-sm px-3 py-2 text-[12.5px] text-primary bg-surface placeholder:text-muted outline-none focus:border-accent">
+            <span class="text-[12px] text-muted">м — точную возможность резки подтвердит менеджер</span>
           </div>
         </div>
       </template>
@@ -341,6 +358,10 @@ function productVariants() {
     selColor:     null, // цвет — параметр заказа, в комбинации вариантов не входит
     current:      null,
     activeThumb:  null,
+
+    // Своя длина — параметр заказа (для вариантов с allow_custom_length)
+    customLenActive: false,
+    customLen:       '',
 
     // RAL-палитра
     ralOpen:   false,
@@ -428,6 +449,8 @@ function productVariants() {
     selectMaterial(id) {
       this.sel = { material_id: id, steel_grade_id: null, finish_id: null, length_m: null };
       this.selColor = null;
+      this.customLenActive = false;
+      this.customLen = '';
       this.ralOpen = false;
       this.customOpen = false;
       this.customSubmitted = false;
@@ -437,6 +460,8 @@ function productVariants() {
       this.sel.finish_id = id;
       this.sel.length_m  = null;
       this.selColor = null;
+      this.customLenActive = false;
+      this.customLen = '';
       this.ralOpen = false;
       this.customOpen = false;
       this.customSubmitted = false;
@@ -448,8 +473,17 @@ function productVariants() {
       this._syncUrl();
     },
     selectLength(len) {
+      this.customLenActive = false;
+      this.customLen = '';
       this.sel.length_m = len;
       this._autoSelect();
+    },
+    activateCustomLength() {
+      this.customLenActive = true;
+      // Привязываемся к любому варианту текущей комбинации (длина уточняется клиентом)
+      this.sel.length_m = null;
+      this._autoSelect();
+      this.customLenActive = true; // _pickVariant перезаписывает sel — восстанавливаем флаг
     },
     setImage(url) {
       this.activeThumb = url;
@@ -508,7 +542,8 @@ function productVariants() {
       const parts = [this.current.material_name];
       if (this.current.finish_name) parts.push(this.current.finish_name);
       if (this.selectedColorName)   parts.push(this.selectedColorName);
-      if (this.current.length_m)    parts.push(this.current.length_m + ' м');
+      if (this.customLenActive && this.customLen) parts.push(this.customLen + ' м');
+      else if (this.current.length_m)             parts.push(this.current.length_m + ' м');
       return parts.join(' · ');
     },
 
@@ -596,16 +631,36 @@ function productVariants() {
         .sort((a, b) => parseFloat(a) - parseFloat(b));
     },
 
+    // «Своя длина» доступна, если у текущей комбинации есть вариант с флагом
+    get customLengthAvailable() {
+      const s = this.sel;
+      return this.variants.some(v =>
+        v.allow_custom_length &&
+        (s.material_id    == null || v.material_id    === s.material_id) &&
+        (s.steel_grade_id == null || v.steel_grade_id === s.steel_grade_id) &&
+        (s.finish_id      == null || v.finish_id      === s.finish_id)
+      );
+    },
+
+    get lengthLabel() {
+      if (this.customLenActive) {
+        return this.customLen ? this.customLen + ' м (своя)' : 'своя';
+      }
+      return this.current && this.current.length_m ? this.current.length_m + ' м' : '';
+    },
+
     addCurrentToCart() {
       if (!this.current) return;
       const v = this.current;
       const item = {
-        name:  '{{ product.name|escapejs }}',
-        slug:  '{{ product.slug }}',
-        sku:   v.sku,
-        qty:   1,
-        unit:  v.unit_display,
-        color: this.selectedColorName || null,
+        name:   '{{ product.name|escapejs }}',
+        slug:   '{{ product.slug }}',
+        sku:    v.sku,
+        qty:    1,
+        unit:   v.unit_display,
+        color:  this.selectedColorName || null,
+        length: (this.customLenActive && this.customLen)
+                  ? this.customLen + ' м' : null,
       };
       if (this.customSubmitted && this.customLastText) {
         item.color = null;

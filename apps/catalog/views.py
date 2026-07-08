@@ -148,6 +148,7 @@ def _product_detail(request, product):
             'finish_color_ui':  v.finish.color_ui  if v.finish else 'swatches',
             'height_mm':        str(v.height_mm) if v.height_mm else None,
             'length_m':         str(v.length_m)  if v.length_m  else None,
+            'allow_custom_length': v.allow_custom_length,
             'unit':             v.unit,
             'unit_display':     v.get_unit_display(),
             'in_stock':         v.in_stock,
