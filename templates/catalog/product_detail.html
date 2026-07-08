@@ -120,6 +120,30 @@
         </div>
       </template>
 
+      <!-- Марка стали (pill-таб) — только когда марок больше одной -->
+      <template x-if="uniqueSteelGrades.length > 1">
+        <div>
+          <p class="text-[12px] font-semibold text-primary mb-2.5">
+            Марка стали: <span class="font-normal text-muted" x-text="current ? (current.steel_grade_name || '—') : ''"></span>
+          </p>
+          <div class="flex flex-wrap gap-2">
+            <template x-for="gr in uniqueSteelGrades" :key="gr.id">
+              <button
+                @click="selectSteelGrade(gr.id)"
+                :disabled="!isValid('steel_grade_id', gr.id)"
+                :class="{
+                  'bg-accent text-accent-fg border-accent': sel.steel_grade_id === gr.id,
+                  'bg-surface text-primary border-border-strong hover:border-accent': sel.steel_grade_id !== gr.id,
+                  'opacity-30 cursor-not-allowed': !isValid('steel_grade_id', gr.id)
+                }"
+                class="px-4 py-[9px] text-[12px] font-semibold border rounded-sm transition-colors"
+                x-text="gr.name">
+              </button>
+            </template>
+          </div>
+        </div>
+      </template>
+
       <!-- Обработка (pill-таб) — только когда обработок больше одной -->
       <template x-if="uniqueFinishes.length > 1">
         <div>
@@ -456,6 +480,16 @@ function productVariants() {
       this.customSubmitted = false;
       this._autoSelect();
     },
+    selectSteelGrade(id) {
+      this.sel.steel_grade_id = id;
+      this.customLenActive = false;
+      this.customLen = '';
+      this._autoSelect();
+      // _autoSelect мог сменить обработку — цвет из чужой палитры сбрасываем
+      if (this.selColor && !this.uniqueColors.some(c => c.id === this.selColor)) {
+        this.selColor = null;
+      }
+    },
     selectFinish(id) {
       this.sel.finish_id = id;
       this.sel.length_m  = null;
@@ -540,6 +574,7 @@ function productVariants() {
     get photoCaption() {
       if (!this.current) return '';
       const parts = [this.current.material_name];
+      if (this.current.steel_grade_name) parts.push(this.current.steel_grade_name);
       if (this.current.finish_name) parts.push(this.current.finish_name);
       if (this.selectedColorName)   parts.push(this.selectedColorName);
       if (this.customLenActive && this.customLen) parts.push(this.customLen + ' м');
@@ -567,6 +602,17 @@ function productVariants() {
         v.finish_id &&
         (this.finishColors[v.finish_id] || []).length > 0
       );
+    },
+
+    get uniqueSteelGrades() {
+      const seen = {};
+      return this.variants
+        .filter(v =>
+          v.steel_grade_id &&
+          (this.sel.material_id == null || v.material_id === this.sel.material_id) &&
+          !seen[v.steel_grade_id] && (seen[v.steel_grade_id] = true)
+        )
+        .map(v => ({ id: v.steel_grade_id, name: v.steel_grade_name }));
     },
 
     get uniqueFinishes() {
