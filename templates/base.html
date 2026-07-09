@@ -28,7 +28,9 @@
 
   {% block extra_head %}{% endblock %}
 </head>
-<body class="h-full flex flex-col bg-surface text-primary" x-data>
+<!-- min-h-full (не h-full): с фиксированной высотой flex-колонка сжимает
+     header/footer на длинных страницах (flex-shrink), высота шапки «прыгает» -->
+<body class="min-h-full flex flex-col bg-surface text-primary" x-data>
 
   {% include "partials/_header.html" %}
 
@@ -43,6 +45,19 @@
 
   <!-- Alpine.js -->
   <script>
+    // Маска телефона: +7 (999) 123-45-67. Ведущие 8/7 приводятся к +7.
+    window.formatPhone = function (value) {
+      var digits = String(value).replace(/\D/g, '');
+      if (digits[0] === '8' || digits[0] === '7') digits = digits.slice(1);
+      digits = digits.slice(0, 10);
+      var res = '+7';
+      if (digits.length > 0) res += ' (' + digits.slice(0, 3);
+      if (digits.length >= 4) res += ') ' + digits.slice(3, 6);
+      if (digits.length >= 7) res += '-' + digits.slice(6, 8);
+      if (digits.length >= 9) res += '-' + digits.slice(8, 10);
+      return res;
+    };
+
     document.addEventListener('alpine:init', function () {
 
       // ─ Тема ─
@@ -124,12 +139,22 @@
       Alpine.data('cartForm', function () {
         return {
           name: '',
-          phone: '',
+          phone: '+7 ',
+          contactMethod: 'phone',
+          contactValue: '',
           comment: '',
           agree: false,
           phoneError: false,
           error: null,
           loading: false,
+
+          // Подпись/плейсхолдер поля контакта для выбранного способа связи
+          contactField: {
+            telegram: { label: 'Ник или ссылка в Telegram', placeholder: '@nickname или t.me/…' },
+            whatsapp: { label: 'Номер WhatsApp',            placeholder: 'Если отличается от телефона' },
+            max:      { label: 'Номер или ссылка в MAX',    placeholder: 'Если отличается от телефона' },
+            email:    { label: 'Электронная почта',         placeholder: 'you@example.ru' },
+          },
 
           qtyLabel(n) {
             if (n === 1) return 'товар';
@@ -146,9 +171,17 @@
             this.error = null;
             this.phoneError = false;
 
-            if (!this.phone || this.phone.trim().length < 5) {
+            if (this.phone.replace(/\D/g, '').length < 11) {
               this.phoneError = true;
-              this.error = 'Укажите номер телефона';
+              this.error = 'Укажите номер телефона полностью';
+              return;
+            }
+            if (this.contactMethod === 'telegram' && !this.contactValue.trim()) {
+              this.error = 'Укажите ник или ссылку в Telegram';
+              return;
+            }
+            if (this.contactMethod === 'email' && this.contactValue.indexOf('@') === -1) {
+              this.error = 'Укажите электронную почту';
               return;
             }
             if (!this.agree) {
@@ -191,6 +224,8 @@
                 body: JSON.stringify({
                   name: this.name.trim(),
                   phone: this.phone.trim(),
+                  contact_method: this.contactMethod,
+                  contact_value: this.contactMethod === 'phone' ? '' : this.contactValue.trim(),
                   comment: this.comment.trim(),
                   agree: this.agree,
                   captcha_token: captchaToken,

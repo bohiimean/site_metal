@@ -174,10 +174,17 @@ def submit_cart(request):
 
     cart_snapshot = _build_cart_snapshot(data.get('cart_snapshot'))
 
+    contact_method = str(data.get('contact_method') or 'phone')
+    if contact_method not in dict(Lead.CONTACT_CHOICES):
+        contact_method = 'phone'
+    contact_value = str(data.get('contact_value') or '')[:200].strip()
+
     with transaction.atomic():
         lead = Lead.objects.create(
             name=(str(data.get('name') or ''))[:MAX_STR_LEN].strip(),
             phone=phone[:30],
+            contact_method=contact_method,
+            contact_value=contact_value,
             comment=(str(data.get('comment') or ''))[:MAX_STR_LEN].strip(),
             cart_snapshot=cart_snapshot,
             source='cart',

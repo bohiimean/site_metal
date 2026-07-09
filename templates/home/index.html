@@ -9,36 +9,21 @@
 <!-- ═══════════════════════════════════════════════════
      HERO
 ════════════════════════════════════════════════════ -->
-<section class="bg-hero-bg text-hero-text" style="min-height:448px">
-  <div class="max-w-7xl mx-auto px-6 lg:px-12 h-full flex items-center gap-10 py-16">
+<section class="bg-hero-bg text-hero-text">
+  <div class="max-w-7xl mx-auto px-6 lg:px-12 py-16 flex flex-col items-center justify-center text-center"
+       style="min-height:448px">
 
-    <!-- Текст -->
-    <div class="flex-1 min-w-0">
-      <p class="text-[11px] font-semibold uppercase tracking-[.12em] text-accent mb-5">
-        Металл &nbsp;·&nbsp; Профили &nbsp;·&nbsp; Латунь
-      </p>
-      <h1 class="text-[48px] lg:text-[64px] font-black leading-[1] text-hero-text mb-5">
-        Металлы<br>и профили<br>оптом.
-      </h1>
-      <p class="text-[13px] text-hero-text/60 mb-8 leading-relaxed">
-        Более 3 000 позиций. Резка в размер.
-      </p>
-      <div class="flex flex-wrap gap-3">
-        <a href="{% url 'products' %}" class="btn-accent">Открыть каталог</a>
-        <button @click="$store.callbackUI.openModal()"
-                class="inline-flex items-center gap-2 border border-white/20 text-hero-text
-                       px-5 py-3.5 text-xs font-semibold uppercase tracking-wide rounded
-                       hover:border-white/50 transition-colors">
-          Связаться с менеджером
-        </button>
-      </div>
-    </div>
-
-    <!-- Плейсхолдер фото (diagonal pattern) -->
-    <div class="hidden lg:block w-[400px] shrink-0 rounded-sm overflow-hidden" style="height:320px">
-      <div class="img-placeholder w-full h-full text-center px-6 text-[11px]">
-        фото&nbsp;/&nbsp;профиль&nbsp;·&nbsp;латунь&nbsp;·&nbsp;нержавейка
-      </div>
+    <h1 class="text-[48px] lg:text-[64px] font-black leading-[1.05] text-hero-text mb-10">
+      Сталь. Профиль.<br>Латунь.
+    </h1>
+    <div class="flex flex-wrap gap-3 justify-center">
+      <a href="{% url 'products' %}" class="btn-accent">Открыть каталог</a>
+      <button @click="$store.callbackUI.openModal()"
+              class="inline-flex items-center gap-2 border border-white/20 text-hero-text
+                     px-5 py-3.5 text-xs font-semibold uppercase tracking-wide rounded
+                     hover:border-white/50 transition-colors">
+        Связаться с менеджером
+      </button>
     </div>
 
   </div>
@@ -75,17 +60,12 @@
   {% if forloop.counter == 3 and site.banner1_enabled and site.banner1_title %}
     <div class="max-w-7xl mx-auto px-6 lg:px-12 mb-9">
       <div class="bg-hero-bg rounded px-10 py-9 flex items-center justify-between gap-6">
-        <div>
-          <p class="text-[22px] font-black text-hero-text leading-snug mb-2">{{ site.banner1_title }}</p>
-          {% if site.banner1_subtitle %}
-            <p class="text-[13.5px] text-hero-text/55 leading-relaxed">{{ site.banner1_subtitle }}</p>
-          {% endif %}
-        </div>
+        <p class="text-[22px] font-black text-hero-text leading-snug">{{ site.banner1_title }}</p>
         {% if site.banner1_button_text %}
           {% if site.banner1_button_url %}
-            <a href="{{ site.banner1_button_url }}" class="shrink-0 btn-accent whitespace-nowrap">{{ site.banner1_button_text }}</a>
+            <a href="{{ site.banner1_button_url }}" class="btn-accent whitespace-nowrap">{{ site.banner1_button_text }}</a>
           {% else %}
-            <button @click="$store.callbackUI.openModal()" class="shrink-0 btn-accent whitespace-nowrap">{{ site.banner1_button_text }}</button>
+            <button @click="$store.callbackUI.openModal()" class="btn-accent whitespace-nowrap">{{ site.banner1_button_text }}</button>
           {% endif %}
         {% endif %}
       </div>
@@ -96,19 +76,14 @@
   {% if forloop.counter == 5 and site.banner2_enabled and site.banner2_title %}
     <div class="max-w-7xl mx-auto px-6 lg:px-12 mb-9">
       <div class="bg-accent rounded px-10 py-9 flex items-center justify-between gap-6">
-        <div>
-          <p class="text-[22px] font-black text-accent-fg leading-snug mb-2">{{ site.banner2_title }}</p>
-          {% if site.banner2_subtitle %}
-            <p class="text-[13.5px] text-accent-fg/85 leading-relaxed">{{ site.banner2_subtitle }}</p>
-          {% endif %}
-        </div>
+        <p class="text-[22px] font-black text-accent-fg leading-snug">{{ site.banner2_title }}</p>
         {% if site.banner2_button_text %}
           {% if site.banner2_button_url %}
             <a href="{{ site.banner2_button_url }}"
-               class="shrink-0 bg-hero-bg text-hero-text px-7 py-3.5 text-[12.5px] font-semibold uppercase tracking-[.04em] rounded whitespace-nowrap hover:opacity-90 transition-opacity">{{ site.banner2_button_text }}</a>
+               class="bg-hero-bg text-hero-text px-7 py-3.5 text-[12.5px] font-semibold uppercase tracking-[.04em] rounded whitespace-nowrap hover:opacity-90 transition-opacity">{{ site.banner2_button_text }}</a>
           {% else %}
             <button @click="$store.callbackUI.openModal()"
-                    class="shrink-0 bg-hero-bg text-hero-text px-7 py-3.5 text-[12.5px] font-semibold uppercase tracking-[.04em] rounded whitespace-nowrap hover:opacity-90 transition-opacity">{{ site.banner2_button_text }}</button>
+                    class="bg-hero-bg text-hero-text px-7 py-3.5 text-[12.5px] font-semibold uppercase tracking-[.04em] rounded whitespace-nowrap hover:opacity-90 transition-opacity">{{ site.banner2_button_text }}</button>
           {% endif %}
         {% endif %}
       </div>

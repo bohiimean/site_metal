@@ -15,7 +15,7 @@ def make_status_action(status, label):
 
 @admin.register(Lead)
 class LeadAdmin(ModelAdmin):
-    list_display = ['id', 'name', 'phone', 'source_badge', 'status_badge', 'created_at']
+    list_display = ['id', 'name', 'phone', 'contact_display', 'source_badge', 'status_badge', 'created_at']
     list_filter = ['status', 'source']
     search_fields = ['name', 'phone']
     readonly_fields = ['created_at', 'updated_at', 'cart_snapshot_display']
@@ -25,11 +25,17 @@ class LeadAdmin(ModelAdmin):
         make_status_action('new',         'Вернуть в «Новые»'),
     ]
     fieldsets = [
-        ('Контакт', {'fields': ['name', 'phone', 'comment', 'consent_pdn']}),
+        ('Контакт', {'fields': ['name', 'phone', 'contact_method', 'contact_value', 'comment', 'consent_pdn']}),
         ('Статус', {'fields': ['source', 'status']}),
         ('Корзина', {'fields': ['cart_snapshot_display']}),
         ('Даты', {'fields': ['created_at', 'updated_at']}),
     ]
+
+    def contact_display(self, obj):
+        if obj.contact_method == 'phone':
+            return obj.get_contact_method_display()
+        return f'{obj.get_contact_method_display()}: {obj.contact_value}' if obj.contact_value else obj.get_contact_method_display()
+    contact_display.short_description = 'Способ связи'
 
     def source_badge(self, obj):
         colors = {'cart': '#3b82f6', 'callback_request': '#8b5cf6'}

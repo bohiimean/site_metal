@@ -2,6 +2,13 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Место под скроллбар резервируется всегда: иначе в браузерах с классической
+   полосой прокрутки (Яндекс/Chrome) контент шапки «прыгает» по ширине между
+   страницами со скроллом и без. В Safari скроллбар накладной — там не влияет. */
+html {
+  scrollbar-gutter: stable;
+}
+
 /* ─── Тема А: «Латунный минимализм» (светлая, по умолчанию) ─── */
 :root {
   --color-surface:       #ffffff;
@@ -167,7 +174,10 @@
   }
 
   .chip-active {
-    @apply border-accent text-accent-fg bg-accent;
+    /* hover-переопределения: чтобы у активного чипа текст не сливался
+       с фоном (hover:text-accent из .chip на bg-accent) */
+    @apply border-accent text-accent-fg bg-accent
+           hover:text-accent-fg hover:border-accent;
   }
 
   /* Контент статических страниц и новостей (HTML из админки) */

@@ -11,9 +11,24 @@ class Lead(models.Model):
         ('in_progress', 'В работе'),
         ('closed',      'Закрыта'),
     ]
+    CONTACT_CHOICES = [
+        ('phone',    'Звонок'),
+        ('telegram', 'Telegram'),
+        ('whatsapp', 'WhatsApp'),
+        ('max',      'MAX'),
+        ('email',    'Почта'),
+    ]
 
     name = models.CharField('Имя', max_length=200)
     phone = models.CharField('Телефон', max_length=30)
+    contact_method = models.CharField(
+        'Способ связи', max_length=20,
+        choices=CONTACT_CHOICES, default='phone',
+    )
+    contact_value = models.CharField(
+        'Контакт для связи', max_length=200, blank=True,
+        help_text='Ник/ссылка Telegram, номер WhatsApp или почта — если выбран не звонок',
+    )
     comment = models.TextField('Комментарий', blank=True)
     cart_snapshot = models.JSONField(
         'Состав корзины', default=list, blank=True,

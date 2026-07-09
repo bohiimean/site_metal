@@ -12,11 +12,11 @@ class SiteSettingsAdmin(ModelAdmin):
 
     fieldsets = [
         ('Промо-баннер 1 (тёмный)', {'fields': [
-            'banner1_enabled', 'banner1_title', 'banner1_subtitle',
+            'banner1_enabled', 'banner1_title',
             'banner1_button_text', 'banner1_button_url',
         ]}),
         ('Промо-баннер 2 (акцентный)', {'fields': [
-            'banner2_enabled', 'banner2_title', 'banner2_subtitle',
+            'banner2_enabled', 'banner2_title',
             'banner2_button_text', 'banner2_button_url',
         ]}),
         ('Футер', {'fields': ['footer_copyright', 'footer_legal']}),

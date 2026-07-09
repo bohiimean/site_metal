@@ -97,8 +97,11 @@
                                 class="w-[26px] h-[26px] flex items-center justify-center text-[15px] font-semibold text-primary hover:text-accent transition-colors">
                           −
                         </button>
-                        <span class="w-7 text-center text-[12px] font-semibold text-primary"
-                              x-text="item.qty"></span>
+                        <input type="text" inputmode="numeric"
+                               :value="item.qty"
+                               @change="$store.cart.setQty(item.key, Math.min(parseInt($event.target.value.replace(/\D/g, ''), 10) || 1, 999));
+                                        $event.target.value = item.qty"
+                               class="w-10 text-center text-[12px] font-semibold text-primary bg-transparent outline-none">
                         <button @click="$store.cart.setQty(item.key, item.qty + 1)"
                                 class="w-[26px] h-[26px] flex items-center justify-center text-[15px] font-semibold text-primary hover:text-accent transition-colors">
                           +
@@ -171,8 +174,34 @@
               Телефон <span class="text-accent">*</span>
             </label>
             <input type="tel" x-model="phone" placeholder="+7 (___) ___-__-__"
+                   @input="phone = window.formatPhone($event.target.value)"
                    :class="phoneError ? 'border-red-400 focus:border-red-400' : 'border-border-strong focus:border-accent'"
                    class="w-full border rounded-sm px-[13px] py-[11px] text-[13px] text-primary bg-surface focus:outline-none transition-colors">
+          </div>
+
+          <!-- Способ связи -->
+          <div class="mb-4">
+            <label class="block text-[11.5px] font-semibold text-primary mb-[7px]">
+              Где с вами удобнее связаться?
+            </label>
+            <div class="flex flex-wrap gap-1.5 mb-2.5">
+              <template x-for="m in [['phone','Звонок'],['telegram','Telegram'],['whatsapp','WhatsApp'],['max','MAX'],['email','Почта']]" :key="m[0]">
+                <button type="button"
+                        @click="contactMethod = m[0]; contactValue = ''"
+                        class="chip"
+                        :class="contactMethod === m[0] && 'chip-active'"
+                        x-text="m[1]"></button>
+              </template>
+            </div>
+            <template x-if="contactField[contactMethod]">
+              <div>
+                <label class="block text-[11px] text-muted mb-[5px]"
+                       x-text="contactField[contactMethod].label"></label>
+                <input type="text" x-model="contactValue"
+                       :placeholder="contactField[contactMethod].placeholder"
+                       class="w-full border border-border-strong rounded-sm px-[13px] py-[11px] text-[13px] text-primary bg-surface focus:outline-none focus:border-accent transition-colors">
+              </div>
+            </template>
           </div>
 
           <!-- Комментарий -->

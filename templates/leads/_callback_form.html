@@ -22,7 +22,8 @@
     <label class="block text-[11.5px] font-semibold text-primary mb-[7px]">
       Телефон <span class="text-accent">*</span>
     </label>
-    <input type="tel" name="phone" value="{{ phone|default:'' }}" placeholder="+7 (___) ___-__-__"
+    <input type="tel" name="phone" value="{{ phone|default:'+7 ' }}" placeholder="+7 (___) ___-__-__"
+           x-data @input="$el.value = window.formatPhone($el.value)"
            class="w-full border border-border-strong rounded-sm px-[13px] py-[11px] text-[13px] text-primary bg-surface focus:outline-none focus:border-accent transition-colors">
   </div>
 
