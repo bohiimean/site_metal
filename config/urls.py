@@ -12,6 +12,8 @@ urlpatterns = [
     path('catalog/', include('apps.catalog.urls', namespace='catalog')),
     path('', include('apps.leads.urls', namespace='leads')),
     path('', include('apps.home.urls')),
+    # Последним: содержит catch-all <slug>/ для статических страниц
+    path('', include('apps.pages.urls', namespace='pages')),
 ]
 
 if settings.DEBUG:

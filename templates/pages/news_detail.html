@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block title %}{{ news.seo_title|default:news.title }} — Арвенокс{% endblock %}
+{% block meta_description %}{{ news.seo_description }}{% endblock %}
+{% block canonical %}<link rel="canonical" href="{{ request.scheme }}://{{ request.get_host }}{{ request.path }}">{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto px-6 lg:px-12 py-6">
+
+  <!-- Хлебные крошки -->
+  <nav class="text-[11px] text-muted mb-4 flex items-center gap-1.5">
+    <a href="/" class="hover:text-accent transition-colors">Главная</a>
+    <span>/</span>
+    <a href="{% url 'pages:news_list' %}" class="hover:text-accent transition-colors">Новости</a>
+    <span>/</span>
+    <span class="text-primary">{{ news.title }}</span>
+  </nav>
+
+  <p class="text-[11px] text-muted mb-2">{{ news.published_at|date:"j E Y" }}</p>
+  <h1 class="text-[24px] font-bold text-primary mb-6">{{ news.title }}</h1>
+
+  <div class="page-content">
+    {{ news.content|safe }}
+  </div>
+
+</div>
+{% endblock %}

@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+
+{% block title %}Новости — Арвенокс{% endblock %}
+{% block meta_description %}Новости и акции компании Арвенокс.{% endblock %}
+{% block canonical %}<link rel="canonical" href="{{ request.scheme }}://{{ request.get_host }}{{ request.path }}">{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto px-6 lg:px-12 py-6">
+
+  <!-- Хлебные крошки -->
+  <nav class="text-[11px] text-muted mb-4 flex items-center gap-1.5">
+    <a href="/" class="hover:text-accent transition-colors">Главная</a>
+    <span>/</span>
+    <span class="text-primary">Новости</span>
+  </nav>
+
+  <h1 class="text-[24px] font-bold text-primary mb-6">Новости</h1>
+
+  {% if news_list %}
+    <div class="space-y-6">
+      {% for item in news_list %}
+        <article class="border-b border-border pb-6">
+          <p class="text-[11px] text-muted mb-1">{{ item.published_at|date:"j E Y" }}</p>
+          <h2 class="text-[16px] font-semibold leading-snug">
+            <a href="{{ item.get_absolute_url }}" class="text-primary hover:text-accent transition-colors">
+              {{ item.title }}
+            </a>
+          </h2>
+        </article>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p class="text-[13px] text-muted">Новостей пока нет.</p>
+  {% endif %}
+
+</div>
+{% endblock %}
