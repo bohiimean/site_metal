@@ -156,6 +156,19 @@
               return;
             }
 
+            // Токен SmartCaptcha — из скрытого поля, которое виджет
+            // добавляет в свой контейнер (если капча включена)
+            var captchaEl = this.$root.querySelector('.js-smartcaptcha');
+            var captchaToken = '';
+            if (captchaEl) {
+              var tokenInput = captchaEl.querySelector('input[name="smart-token"]');
+              captchaToken = tokenInput ? tokenInput.value : '';
+              if (!captchaToken) {
+                this.error = 'Подтвердите, что вы не робот';
+                return;
+              }
+            }
+
             this.loading = true;
             try {
               // Клиент отправляет только sku/qty/color/note — название и единицу
@@ -180,6 +193,7 @@
                   phone: this.phone.trim(),
                   comment: this.comment.trim(),
                   agree: this.agree,
+                  captcha_token: captchaToken,
                   cart_snapshot: items,
                 }),
               });
@@ -190,9 +204,11 @@
                 this.$store.cartUI.view = 'done';
               } else {
                 this.error = data.error || 'Произошла ошибка. Попробуйте ещё раз.';
+                window.resetCaptcha && window.resetCaptcha(captchaEl);
               }
             } catch (e) {
               this.error = 'Ошибка сети. Попробуйте ещё раз.';
+              window.resetCaptcha && window.resetCaptcha(captchaEl);
             } finally {
               this.loading = false;
             }
@@ -216,6 +232,30 @@
       Alpine.initTree(e.detail.elt);
     });
   </script>
+
+  {% if captcha_sitekey %}
+  <!-- Яндекс SmartCaptcha: контейнеры живут в модалке/дровере, поэтому
+       рендерим явно — при открытии формы и после htmx-перерисовки -->
+  <script src="https://smartcaptcha.yandexcloud.net/captcha.js?render=onload&onload=smartCaptchaReady" defer></script>
+  <script>
+    window.renderCaptchas = function () {
+      if (!window.smartCaptcha) return;  // captcha.js ещё не загрузился
+      document.querySelectorAll('.js-smartcaptcha:not([data-widget-id])').forEach(function (el) {
+        if (el.offsetParent === null) return;  // контейнер скрыт (модал закрыт) — виджет сожмётся в ноль
+        var id = window.smartCaptcha.render(el, { sitekey: el.dataset.sitekey });
+        el.dataset.widgetId = String(id);
+      });
+    };
+    window.smartCaptchaReady = function () { window.renderCaptchas(); };
+    // Токен одноразовый: после ответа сервера с ошибкой виджет надо сбросить
+    window.resetCaptcha = function (el) {
+      if (window.smartCaptcha && el && el.dataset.widgetId !== undefined) {
+        window.smartCaptcha.reset(Number(el.dataset.widgetId));
+      }
+    };
+    document.addEventListener('htmx:afterSwap', function () { window.renderCaptchas(); });
+  </script>
+  {% endif %}
 
   {% block extra_js %}{% endblock %}
 </body>

@@ -52,5 +52,11 @@
     <input type="hidden" name="agree" :value="agree ? '1' : ''">
   </div>
 
+  {% if captcha_sitekey %}
+  <!-- SmartCaptcha: токен уходит скрытым полем smart-token внутри формы -->
+  <div class="js-smartcaptcha mb-5" style="height:100px"
+       data-sitekey="{{ captcha_sitekey }}"></div>
+  {% endif %}
+
   <button type="submit" class="btn-accent w-full">Отправить заявку</button>
 </form>

@@ -197,6 +197,14 @@
             </span>
           </div>
 
+          {% if captcha_sitekey %}
+          <!-- SmartCaptcha: форма создаётся динамически (x-if),
+               рендерим виджет при появлении контейнера -->
+          <div class="js-smartcaptcha mt-4" style="height:100px"
+               data-sitekey="{{ captcha_sitekey }}"
+               x-init="$nextTick(function () { window.renderCaptchas && window.renderCaptchas(); })"></div>
+          {% endif %}
+
           <!-- Ошибка -->
           <p x-show="error" x-text="error"
              class="text-[12px] text-red-500 mt-3 leading-relaxed"></p>

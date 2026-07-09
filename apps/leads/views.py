@@ -11,6 +11,7 @@ from django.views.decorators.http import require_POST
 from django_ratelimit.decorators import ratelimit
 
 from apps.catalog.models import ProductVariant
+from .captcha import client_ip, verify_captcha
 from .models import Lead
 
 logger = logging.getLogger(__name__)
@@ -166,6 +167,11 @@ def submit_cart(request):
             {'ok': False, 'error': 'Необходимо согласие на обработку персональных данных'}
         )
 
+    if not verify_captcha(str(data.get('captcha_token') or ''), client_ip(request)):
+        return JsonResponse(
+            {'ok': False, 'error': 'Не пройдена проверка «Я не робот». Попробуйте ещё раз.'}
+        )
+
     cart_snapshot = _build_cart_snapshot(data.get('cart_snapshot'))
 
     with transaction.atomic():
@@ -209,6 +215,15 @@ def submit_callback(request):
     if not request.POST.get('agree'):
         return render(request, 'leads/_callback_form.html', {
             'error': 'Необходимо согласие на обработку персональных данных',
+            'name': name,
+            'phone': phone,
+            'comment': comment,
+        })
+
+    # Виджет SmartCaptcha кладёт токен в скрытое поле smart-token
+    if not verify_captcha(request.POST.get('smart-token', ''), client_ip(request)):
+        return render(request, 'leads/_callback_form.html', {
+            'error': 'Не пройдена проверка «Я не робот». Попробуйте ещё раз.',
             'name': name,
             'phone': phone,
             'comment': comment,
