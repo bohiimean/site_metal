@@ -1,0 +1,50 @@
+{# Страница 500 намеренно автономна: без extends, БД и context processors —
+   она рендерится, когда что-то уже сломалось, и не должна упасть сама. #}
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ошибка сервера — Арвенокс</title>
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Manrope', -apple-system, 'Segoe UI', sans-serif;
+      background: #ffffff;
+      color: #1C1A17;
+      text-align: center;
+    }
+    @media (prefers-color-scheme: dark) {
+      body { background: #111214; color: #EAE6DE; }
+    }
+    .code { font-size: 84px; font-weight: 800; line-height: 1; color: #B8893A; margin: 0 0 12px; }
+    h1 { font-size: 22px; margin: 0 0 10px; }
+    p { font-size: 14px; color: #A09080; line-height: 1.6; max-width: 420px; margin: 0 auto 28px; }
+    a {
+      display: inline-block;
+      background: #B8893A;
+      color: #fff;
+      text-decoration: none;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      padding: 14px 26px;
+      border-radius: 3px;
+    }
+  </style>
+</head>
+<body>
+  <div>
+    <p class="code">500</p>
+    <h1>Что-то пошло не так</h1>
+    <p>На сервере произошла ошибка. Мы уже знаем о ней —
+       попробуйте обновить страницу через пару минут.</p>
+    <a href="/">На главную</a>
+  </div>
+</body>
+</html>

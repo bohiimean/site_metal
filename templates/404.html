@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% block title %}Страница не найдена — Арвенокс{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-6 lg:px-12 py-24 flex flex-col items-center text-center">
+
+  <p class="text-[72px] lg:text-[96px] font-black leading-none text-accent mb-4">404</p>
+  <h1 class="text-[24px] font-bold text-primary mb-3">Страница не найдена</h1>
+  <p class="text-[13.5px] text-muted leading-relaxed max-w-[400px] mb-9">
+    Возможно, страница была удалена или в адресе опечатка.
+    Попробуйте начать с каталога — там всё на месте.
+  </p>
+
+  <div class="flex flex-wrap gap-3 justify-center">
+    <a href="/produkciya/" class="btn-accent">Открыть каталог</a>
+    <a href="/" class="btn-outline">На главную</a>
+  </div>
+
+</div>
+{% endblock %}
