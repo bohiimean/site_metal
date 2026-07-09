@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% load static %}
 
-{% block title %}{% if category %}{{ category.name }}{% else %}Каталог{% endif %} — МЕТАПРОФ{% endblock %}
+{% block title %}{% if category %}{{ category.name }}{% else %}Все товары{% endif %} — Арвенокс{% endblock %}
 {% block meta_description %}{% if category %}{{ category.seo_description }}{% endif %}{% endblock %}
 {% block canonical %}<link rel="canonical" href="{{ request.scheme }}://{{ request.get_host }}{{ request.path }}">{% endblock %}
 
@@ -12,7 +12,7 @@
   <nav class="text-[11px] text-muted mb-4 flex items-center gap-1.5">
     <a href="/" class="hover:text-accent transition-colors">Главная</a>
     <span>/</span>
-    <a href="{% url 'catalog:index' %}" class="hover:text-accent transition-colors">Каталог</a>
+    <a href="{% url 'catalog:index' %}" class="hover:text-accent transition-colors">Все товары</a>
     {% if category %}
       <span>/</span>
       <span class="text-primary">{{ category.name }}</span>

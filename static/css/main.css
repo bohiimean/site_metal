@@ -99,6 +99,10 @@
     font-family: 'Manrope', sans-serif;
     background-color: var(--color-surface);
     color: var(--color-text-primary);
+    /* Всегда резервируем место под вертикальный скроллбар, чтобы ширина
+       контента (и шапки) не «скакала» между страницами с прокруткой и без
+       неё в Chromium/Яндекс.Браузере. В Safari (overlay-скроллбар) без эффекта. */
+    scrollbar-gutter: stable;
   }
 
   /* Плавная смена темы */

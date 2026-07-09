@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 {% load static %}
 
-{% block title %}Продукция — МЕТАПРОФ{% endblock %}
-{% block meta_description %}Каталог продукции МЕТАПРОФ: профиль для напольных покрытий, плинтусы, пороги, защита ступеней и углов из нержавеющей стали и латуни.{% endblock %}
+{% block title %}Каталог — Арвенокс{% endblock %}
+{% block meta_description %}Каталог продукции Арвенокс: профиль для напольных покрытий, плинтусы, пороги, защита ступеней и углов из нержавеющей стали и латуни.{% endblock %}
 {% block canonical %}<link rel="canonical" href="{{ request.scheme }}://{{ request.get_host }}{{ request.path }}">{% endblock %}
 
 {% block content %}
@@ -12,10 +12,10 @@
   <nav class="text-[11px] text-muted mb-4 flex items-center gap-1.5">
     <a href="/" class="hover:text-accent transition-colors">Главная</a>
     <span>/</span>
-    <span class="text-primary">Продукция</span>
+    <span class="text-primary">Каталог</span>
   </nav>
 
-  <h1 class="text-[24px] font-bold text-primary mb-6">Продукция</h1>
+  <h1 class="text-[24px] font-bold text-primary mb-6">Каталог</h1>
 
   <!-- ─── Основные разделы (материалы) ─── -->
   {% if main_sections %}

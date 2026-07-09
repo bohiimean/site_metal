@@ -58,6 +58,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'apps.pages.context_processors.site_settings',
             ],
         },
     },
@@ -105,8 +106,8 @@ YANDEX_CAPTCHA_SERVER_KEY = config('YANDEX_CAPTCHA_SERVER_KEY', default='')
 YANDEX_CAPTCHA_CLIENT_KEY = config('YANDEX_CAPTCHA_CLIENT_KEY', default='')
 
 UNFOLD = {
-    'SITE_TITLE': 'МЕТАПРОФ — админка',
-    'SITE_HEADER': 'МЕТАПРОФ',
+    'SITE_TITLE': 'Арвенокс — админка',
+    'SITE_HEADER': 'Арвенокс',
     'SITE_SYMBOL': 'factory',
     'SHOW_HISTORY': True,
     'SHOW_VIEW_ON_SITE': True,

@@ -4,7 +4,7 @@
 
       <div>
         <p class="text-[17px] font-bold tracking-tight mb-2">
-          МЕТА<span class="text-accent">ПРОФ</span>
+          Арве<span class="text-accent">нокс</span>
         </p>
         <p class="text-[12px] text-muted leading-relaxed">
           Металлы и профили оптом.<br>
@@ -27,7 +27,6 @@
       <div>
         <p class="text-[11px] font-semibold uppercase tracking-widest text-muted mb-3">Покупателям</p>
         <ul class="space-y-2 text-[12px]">
-          <li><a href="/dostavka/" class="hover:text-accent transition-colors">Доставка</a></li>
           <li><a href="/oplata/" class="hover:text-accent transition-colors">Оплата</a></li>
           <li><a href="/politika-konfidentsialnosti/" class="hover:text-accent transition-colors">Политика конфиденциальности</a></li>
         </ul>
@@ -45,8 +44,8 @@
     </div>
 
     <div class="border-t border-white/10 mt-10 pt-6 flex flex-col sm:flex-row justify-between gap-2 text-[11px] text-muted">
-      <p>{% now "Y" %} © МЕТАПРОФ. Все права защищены.</p>
-      <p>ИНН 7700000000 · г. Москва</p>
+      {% if site.footer_copyright %}<p>{% now "Y" %} © {{ site.footer_copyright }}</p>{% endif %}
+      {% if site.footer_legal %}<p>{{ site.footer_legal }}</p>{% endif %}
     </div>
   </div>
 </footer>

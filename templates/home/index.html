@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 {% load static %}
 
-{% block title %}МЕТАПРОФ — металлы и профили оптом{% endblock %}
-{% block meta_description %}Более 3 000 позиций металлопроката. Резка в размер. Доставка по Москве за 1 день. Оставьте заявку — менеджер свяжется с вами.{% endblock %}
+{% block title %}Арвенокс — металлы и профили оптом{% endblock %}
+{% block meta_description %}Более 3 000 позиций металлопроката. Резка в размер. Оставьте заявку — менеджер свяжется с вами.{% endblock %}
 
 {% block content %}
 
@@ -21,11 +21,10 @@
         Металлы<br>и профили<br>оптом.
       </h1>
       <p class="text-[13px] text-hero-text/60 mb-8 leading-relaxed">
-        Более 3 000 позиций. Резка в размер.<br>
-        Доставка по Москве за 1 день.
+        Более 3 000 позиций. Резка в размер.
       </p>
       <div class="flex flex-wrap gap-3">
-        <a href="{% url 'catalog:index' %}" class="btn-accent">Открыть каталог</a>
+        <a href="{% url 'products' %}" class="btn-accent">Открыть каталог</a>
         <button @click="$store.callbackUI.openModal()"
                 class="inline-flex items-center gap-2 border border-white/20 text-hero-text
                        px-5 py-3.5 text-xs font-semibold uppercase tracking-wide rounded
@@ -72,31 +71,46 @@
 ════════════════════════════════════════════════════ -->
 {% for block, products in blocks_with_products %}
 
-  <!-- Промо-баннер перед 3-м блоком -->
-  {% if forloop.counter == 3 %}
+  <!-- Промо-баннер 1 (настраивается в админке → Настройки сайта) перед 3-м блоком -->
+  {% if forloop.counter == 3 and site.banner1_enabled and site.banner1_title %}
     <div class="max-w-7xl mx-auto px-6 lg:px-12 mb-9">
       <div class="bg-hero-bg rounded px-10 py-9 flex items-center justify-between gap-6">
         <div>
-          <p class="text-[22px] font-black text-hero-text leading-snug mb-2">Режем металл точно под ваш чертёж</p>
-          <p class="text-[13.5px] text-hero-text/55 leading-relaxed">Резка в размер — от листа до готовой заготовки за 1 рабочий день</p>
+          <p class="text-[22px] font-black text-hero-text leading-snug mb-2">{{ site.banner1_title }}</p>
+          {% if site.banner1_subtitle %}
+            <p class="text-[13.5px] text-hero-text/55 leading-relaxed">{{ site.banner1_subtitle }}</p>
+          {% endif %}
         </div>
-        <a href="{% url 'catalog:index' %}" class="shrink-0 btn-accent whitespace-nowrap">Узнать больше</a>
+        {% if site.banner1_button_text %}
+          {% if site.banner1_button_url %}
+            <a href="{{ site.banner1_button_url }}" class="shrink-0 btn-accent whitespace-nowrap">{{ site.banner1_button_text }}</a>
+          {% else %}
+            <button @click="$store.callbackUI.openModal()" class="shrink-0 btn-accent whitespace-nowrap">{{ site.banner1_button_text }}</button>
+          {% endif %}
+        {% endif %}
       </div>
     </div>
   {% endif %}
 
-  <!-- Промо-баннер перед 5-м блоком -->
-  {% if forloop.counter == 5 %}
+  <!-- Промо-баннер 2 (настраивается в админке → Настройки сайта) перед 5-м блоком -->
+  {% if forloop.counter == 5 and site.banner2_enabled and site.banner2_title %}
     <div class="max-w-7xl mx-auto px-6 lg:px-12 mb-9">
       <div class="bg-accent rounded px-10 py-9 flex items-center justify-between gap-6">
         <div>
-          <p class="text-[22px] font-black text-accent-fg leading-snug mb-2">Оптовые закупки от 50 000 ₽</p>
-          <p class="text-[13.5px] text-accent-fg/85 leading-relaxed">Индивидуальные цены и отсрочка платежа для постоянных клиентов</p>
+          <p class="text-[22px] font-black text-accent-fg leading-snug mb-2">{{ site.banner2_title }}</p>
+          {% if site.banner2_subtitle %}
+            <p class="text-[13.5px] text-accent-fg/85 leading-relaxed">{{ site.banner2_subtitle }}</p>
+          {% endif %}
         </div>
-        <button @click="$store.callbackUI.openModal()"
-                class="shrink-0 bg-hero-bg text-hero-text px-7 py-3.5 text-[12.5px] font-semibold uppercase tracking-[.04em] rounded whitespace-nowrap hover:opacity-90 transition-opacity">
-          Оставить заявку
-        </button>
+        {% if site.banner2_button_text %}
+          {% if site.banner2_button_url %}
+            <a href="{{ site.banner2_button_url }}"
+               class="shrink-0 bg-hero-bg text-hero-text px-7 py-3.5 text-[12.5px] font-semibold uppercase tracking-[.04em] rounded whitespace-nowrap hover:opacity-90 transition-opacity">{{ site.banner2_button_text }}</a>
+          {% else %}
+            <button @click="$store.callbackUI.openModal()"
+                    class="shrink-0 bg-hero-bg text-hero-text px-7 py-3.5 text-[12.5px] font-semibold uppercase tracking-[.04em] rounded whitespace-nowrap hover:opacity-90 transition-opacity">{{ site.banner2_button_text }}</button>
+          {% endif %}
+        {% endif %}
       </div>
     </div>
   {% endif %}
@@ -145,37 +159,9 @@
 ════════════════════════════════════════════════════ -->
 <section class="border-t border-border bg-surface-alt">
   <div class="max-w-7xl mx-auto px-6 lg:px-12">
-    <div class="grid grid-cols-2 lg:grid-cols-4 lg:h-20">
+    <div class="flex flex-col sm:flex-row sm:justify-center lg:h-20 divide-y sm:divide-y-0 sm:divide-x divide-border">
 
-      <div class="flex items-center gap-3 py-4 lg:py-0 border-r border-border">
-        <div class="w-[34px] h-[34px] bg-accent rounded-sm flex items-center justify-center shrink-0 text-accent-fg">
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none">
-            <rect x="1" y="3" width="15" height="13" rx="1" stroke="currentColor" stroke-width="1.7"/>
-            <path d="M16 8h3l3 3v5h-6V8z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
-            <circle cx="5.5" cy="18.5" r="1.5" stroke="currentColor" stroke-width="1.5"/>
-            <circle cx="18.5" cy="18.5" r="1.5" stroke="currentColor" stroke-width="1.5"/>
-          </svg>
-        </div>
-        <div>
-          <p class="text-[12.5px] font-semibold text-primary leading-tight">Быстрая доставка</p>
-          <p class="text-[11px] text-muted mt-0.5">По Москве — 1 день</p>
-        </div>
-      </div>
-
-      <div class="flex items-center gap-3 py-4 lg:py-0 pl-6 border-r border-border">
-        <div class="w-[34px] h-[34px] bg-accent rounded-sm flex items-center justify-center shrink-0 text-accent-fg">
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none">
-            <path d="M9 12l2 2 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.7"/>
-          </svg>
-        </div>
-        <div>
-          <p class="text-[12.5px] font-semibold text-primary leading-tight">Гарантия качества</p>
-          <p class="text-[11px] text-muted mt-0.5">Сертификаты ГОСТ</p>
-        </div>
-      </div>
-
-      <div class="flex items-center gap-3 py-4 lg:py-0 pl-6 border-r border-border">
+      <div class="flex items-center gap-3 py-4 sm:px-12 justify-center sm:justify-start">
         <div class="w-[34px] h-[34px] bg-accent rounded-sm flex items-center justify-center shrink-0 text-accent-fg">
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none">
             <rect x="3" y="3" width="18" height="18" rx="1" stroke="currentColor" stroke-width="1.7"/>
@@ -191,7 +177,7 @@
         </div>
       </div>
 
-      <div class="flex items-center gap-3 py-4 lg:py-0 pl-6">
+      <div class="flex items-center gap-3 py-4 sm:px-12 justify-center sm:justify-start">
         <div class="w-[34px] h-[34px] bg-accent rounded-sm flex items-center justify-center shrink-0 text-accent-fg">
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none">
             <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2v10z"

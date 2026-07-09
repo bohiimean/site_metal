@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% load static %}
 
-{% block title %}{{ product.seo_title|default:product.name }} — МЕТАПРОФ{% endblock %}
+{% block title %}{{ product.seo_title|default:product.name }} — Арвенокс{% endblock %}
 {% block meta_description %}{{ product.seo_description }}{% endblock %}
 {% block canonical %}<link rel="canonical" href="{{ request.scheme }}://{{ request.get_host }}{{ request.path }}">{% endblock %}
 
@@ -21,7 +21,7 @@
   <nav class="text-[11px] text-muted mb-6 flex items-center gap-1.5">
     <a href="/" class="hover:text-accent">Главная</a>
     <span>/</span>
-    <a href="{% url 'catalog:index' %}" class="hover:text-accent">Каталог</a>
+    <a href="{% url 'catalog:index' %}" class="hover:text-accent">Все товары</a>
     <span>/</span>
     {% if product.category %}
       <a href="{% url 'catalog:detail' product.category.slug %}" class="hover:text-accent">
