@@ -41,9 +41,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Tailwind CLI — нужен только в dev (watch). В проде CSS собран заранее и
-# копируется через COPY . .; тем не менее оставляем бинарь, чтобы образ
-# был универсален. Он ~50 МБ, но альтернатива — Node — намного жирнее.
+# Tailwind CLI: в dev — watch из start.sh, в проде — однократная сборка
+# минифицированного CSS ниже. Бинарь ~50 МБ, но альтернатива — Node —
+# намного жирнее.
 RUN ARCH=$(uname -m) && \
     if [ "$ARCH" = "aarch64" ]; then TW_ARCH="arm64"; else TW_ARCH="x64"; fi && \
     curl -sLo /usr/local/bin/tailwindcss \
@@ -62,6 +62,12 @@ WORKDIR /app
 
 # Копируем код с правильным владельцем
 COPY --chown=app:app . .
+
+# Production-CSS собирается на этапе сборки образа: start-prod.sh ничего
+# не компилирует. В dev файл перекрывается bind-mount'ом `.:/app`
+# и пересобирается watcher'ом из start.sh.
+RUN tailwindcss -i static/css/main.css -o static/css/output.css --minify \
+    && chown app:app static/css/output.css
 
 # Директории для media/staticfiles — принадлежат app-юзеру.
 # В docker-compose они переопределяются volumes, в проде остаются.

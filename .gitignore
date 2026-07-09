@@ -13,3 +13,4 @@ media/
 static/css/output.css
 .idea/
 .vscode/
+.cache/

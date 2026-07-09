@@ -1,0 +1,95 @@
+# Production-стек: Postgres + Redis + Django (Gunicorn) + Nginx + certbot.
+# Запуск:  docker compose -f docker-compose.prod.yml up -d --build
+# Подробности и первый запуск (выпуск сертификата) — в DEPLOY.md.
+
+# Фиксируем имя проекта, чтобы имена volumes (metal_media_data и т.д.)
+# не зависели от имени директории — на них ссылаются бэкап-скрипты.
+name: metal
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: ${DB_NAME:-metal}
+      POSTGRES_USER: ${DB_USER:-metal}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD обязателен в .env}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-metal}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  web:
+    build:
+      context: .
+      dockerfile: docker/django/Dockerfile
+      args:
+        REQUIREMENTS: requirements/production.txt
+    command: bash docker/django/start-prod.sh
+    restart: unless-stopped
+    volumes:
+      - media_data:/app/media
+      - static_data:/app/staticfiles
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.production
+    env_file:
+      - .env
+    expose:
+      - "8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?DOMAIN обязателен в .env}
+    volumes:
+      - ./docker/nginx/default.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - static_data:/app/staticfiles:ro
+      - media_data:/app/media:ro
+      - certbot_certs:/etc/letsencrypt:ro
+      - certbot_webroot:/var/www/certbot:ro
+    depends_on:
+      - web
+
+  # Продление сертификата каждые 12 часов (выпускается он один раз
+  # вручную — см. DEPLOY.md). После продления nginx нужно перечитать
+  # конфиг: cron на хосте делает `nginx -s reload` (см. DEPLOY.md).
+  certbot:
+    image: certbot/certbot
+    restart: unless-stopped
+    volumes:
+      - certbot_certs:/etc/letsencrypt
+      - certbot_webroot:/var/www/certbot
+    entrypoint: >
+      sh -c 'trap exit TERM;
+             while :; do
+               certbot renew --webroot -w /var/www/certbot --quiet;
+               sleep 12h & wait $${!};
+             done'
+
+volumes:
+  postgres_data:
+  media_data:
+  static_data:
+  certbot_certs:
+  certbot_webroot:
