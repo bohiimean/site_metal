@@ -1,0 +1,13 @@
+User-agent: *
+Disallow: /admin/
+Disallow: /leads/
+Disallow: /search/
+
+User-agent: Yandex
+Disallow: /admin/
+Disallow: /leads/
+Disallow: /search/
+# Параметры фильтров/варианта не создают уникальных страниц (canonical — чистый URL)
+Clean-param: sku&material&steel_grade&finish&sort&page
+
+Sitemap: {{ request.scheme }}://{{ request.get_host }}/sitemap.xml

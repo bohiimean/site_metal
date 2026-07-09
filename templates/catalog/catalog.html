@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% load static %}
 
-{% block title %}{% if category %}{{ category.name }}{% else %}Все товары{% endif %} — Арвенокс{% endblock %}
+{% block title %}{% if category %}{{ category.seo_title|default:category.name }}{% else %}Все товары{% endif %} — Арвенокс{% endblock %}
 {% block meta_description %}{% if category %}{{ category.seo_description }}{% endif %}{% endblock %}
 {% block canonical %}<link rel="canonical" href="{{ request.scheme }}://{{ request.get_host }}{{ request.path }}">{% endblock %}
 

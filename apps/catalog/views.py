@@ -1,7 +1,12 @@
+import json
+
 from django.core.paginator import Paginator
 from django.db.models import Q
 from django.http import Http404
 from django.shortcuts import render
+from django.urls import reverse
+from django.utils.html import strip_tags
+from django.utils.text import Truncator
 
 from apps.references.models import FinishColor, Material, SteelGrade, Finish
 from .filters import ProductFilter
@@ -149,6 +154,57 @@ def _render_catalog(request, category):
 
 # ─── Product detail ───────────────────────────────────────────
 
+def _schema_org(request, product, images):
+    """JSON-LD: Product + BreadcrumbList.
+
+    Offer/цена не выводятся намеренно — цен на сайте нет (цену называет
+    менеджер), а Offer без price невалиден для поисковиков.
+    """
+    product_schema = {
+        '@context': 'https://schema.org',
+        '@type': 'Product',
+        'name': product.name,
+        'url': request.build_absolute_uri(product.get_absolute_url()),
+    }
+    description = strip_tags(product.seo_description or product.description)
+    if description:
+        product_schema['description'] = Truncator(description).chars(500)
+    if product.profile_code:
+        product_schema['sku'] = product.profile_code
+    if product.category:
+        product_schema['category'] = product.category.name
+    if images:
+        try:
+            product_schema['image'] = request.build_absolute_uri(images[0].gallery.url)
+        except Exception:
+            pass  # исходный файл недоступен — schema без картинки
+
+    crumbs = [('Главная', '/'), ('Все товары', reverse('catalog:index'))]
+    if product.category:
+        crumbs.append((
+            product.category.name,
+            reverse('catalog:detail', kwargs={'slug': product.category.slug}),
+        ))
+    crumbs.append((product.name, product.get_absolute_url()))
+    breadcrumb_schema = {
+        '@context': 'https://schema.org',
+        '@type': 'BreadcrumbList',
+        'itemListElement': [
+            {
+                '@type': 'ListItem',
+                'position': i,
+                'name': name,
+                'item': request.build_absolute_uri(url),
+            }
+            for i, (name, url) in enumerate(crumbs, 1)
+        ],
+    }
+
+    data = json.dumps([product_schema, breadcrumb_schema], ensure_ascii=False)
+    # '<' экранируем, чтобы контент из админки не мог закрыть тег <script>
+    return data.replace('<', '\\u003C')
+
+
 def _product_detail(request, product):
     variants_qs = (
         product.variants
@@ -229,4 +285,5 @@ def _product_detail(request, product):
         'combinations_json':  combinations,
         'finish_colors_json': finish_colors,
         'color_images_json':  color_images,
+        'schema_org':         _schema_org(request, product, images),
     })

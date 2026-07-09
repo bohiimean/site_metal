@@ -1,12 +1,17 @@
 from django.contrib import admin
+from django.contrib.sitemaps.views import sitemap
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
+from django.views.generic import TemplateView
 
 from apps.catalog import views as catalog_views
+from config.sitemaps import SITEMAPS
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('sitemap.xml', sitemap, {'sitemaps': SITEMAPS}, name='sitemap'),
+    path('robots.txt', TemplateView.as_view(template_name='robots.txt', content_type='text/plain')),
     path('search/', catalog_views.search_view, name='search'),
     path('produkciya/', catalog_views.products_index, name='products'),
     path('catalog/', include('apps.catalog.urls', namespace='catalog')),

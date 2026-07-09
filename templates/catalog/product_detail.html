@@ -6,6 +6,7 @@
 {% block canonical %}<link rel="canonical" href="{{ request.scheme }}://{{ request.get_host }}{{ request.path }}">{% endblock %}
 
 {% block extra_head %}
+<script type="application/ld+json">{{ schema_org|safe }}</script>
 {{ variants_json|json_script:"variants-data" }}
 {{ combinations_json|json_script:"combinations-data" }}
 {{ finish_colors_json|json_script:"finish-colors-data" }}
