@@ -20,7 +20,7 @@
      x-init="init()">
 
   <!-- Хлебные крошки -->
-  <nav class="text-[11px] text-muted mb-6 flex items-center gap-1.5">
+  <nav class="text-[11px] text-muted mb-6 flex items-center gap-1.5 whitespace-nowrap overflow-x-auto scrollbar-none">
     <a href="/" class="hover:text-accent">Главная</a>
     <span>/</span>
     <a href="{% url 'catalog:index' %}" class="hover:text-accent">Все товары</a>
@@ -42,7 +42,7 @@
            длинный предмет не обрезается. Клик — раскрытие на весь экран. -->
       <!-- Бокс намеренно ничем не выделен (без фона-подложки и обводки):
            белый фон товарных фото сливается со страницей -->
-      <div class="group relative overflow-hidden h-[420px]">
+      <div class="group relative overflow-hidden aspect-[4/3] lg:aspect-auto lg:h-[420px]">
         <template x-if="displayImage">
           <img :src="displayImage" :srcset="displaySrcset"
                sizes="(min-width:1024px) 520px, 100vw"

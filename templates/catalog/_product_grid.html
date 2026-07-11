@@ -1,20 +1,30 @@
 <!-- Сетка товаров (htmx-фрагмент для фильтрации) -->
-<div class="flex items-center justify-between mb-5 gap-4">
+<div class="flex items-center justify-between flex-wrap mb-5 gap-x-4 gap-y-2">
   <p class="text-[12px] text-muted">
     Показано {{ page_obj.start_index }}–{{ page_obj.end_index }} из {{ paginator.count }} товаров
   </p>
-  <select name="sort" form="filter-form"
-          class="text-[12px] border border-border rounded px-3 py-1.5 bg-surface text-primary cursor-pointer">
-    <option value="new"  {% if sort == 'new'  %}selected{% endif %}>По новизне</option>
-    <option value="name" {% if sort == 'name' %}selected{% endif %}>По названию</option>
-  </select>
+  <div class="flex items-center gap-2">
+    <!-- Кнопка фильтров (только мобайл; filtersOpen — в x-data каталога) -->
+    <button type="button" @click="filtersOpen = true"
+            class="lg:hidden flex items-center gap-1.5 text-[12px] border border-border rounded px-3 py-1.5 bg-surface text-primary">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+        <path d="M3 5h18M6 12h12M10 19h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+      Фильтры
+    </button>
+    <select name="sort" form="filter-form"
+            class="text-[12px] border border-border rounded px-3 py-1.5 bg-surface text-primary cursor-pointer">
+      <option value="new"  {% if sort == 'new'  %}selected{% endif %}>По новизне</option>
+      <option value="name" {% if sort == 'name' %}selected{% endif %}>По названию</option>
+    </select>
+  </div>
 </div>
 
-<div id="product-list" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+<div id="product-list" class="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
   {% for product in page_obj %}
     {% include "catalog/_product_card.html" %}
   {% empty %}
-    <div class="col-span-3 py-16 text-center">
+    <div class="col-span-full py-16 text-center">
       <p class="text-muted text-[13px] mb-3">Товары не найдены</p>
       <a href="." class="btn-outline text-[11px]">Сбросить фильтры</a>
     </div>

@@ -9,7 +9,7 @@
 <div class="max-w-7xl mx-auto px-6 lg:px-12 py-6">
 
   <!-- Хлебные крошки -->
-  <nav class="text-[11px] text-muted mb-4 flex items-center gap-1.5">
+  <nav class="text-[11px] text-muted mb-4 flex items-center gap-1.5 whitespace-nowrap overflow-x-auto scrollbar-none">
     <a href="/" class="hover:text-accent transition-colors">Главная</a>
     <span>/</span>
     <a href="{% url 'catalog:index' %}" class="hover:text-accent transition-colors">Все товары</a>
@@ -24,10 +24,31 @@
     {% if category %}{{ category.h1|default:category.name }}{% else %}Все товары{% endif %}
   </h1>
 
-  <div class="flex gap-8 mt-6">
+  <div class="flex gap-8 mt-6" x-data="{ filtersOpen: false }">
 
-    <!-- ─── Сайдбар с фильтрами ─── -->
-    <aside class="w-64 shrink-0 hidden lg:block">
+    <!-- Оверлей под мобильной панелью фильтров -->
+    <div x-show="filtersOpen" x-cloak x-transition.opacity
+         @click="filtersOpen = false"
+         class="fixed inset-0 bg-black/40 z-[85] lg:hidden"></div>
+
+    <!-- ─── Фильтры: на десктопе — сайдбар, на мобиле — выдвижная панель ─── -->
+    <aside class="fixed inset-y-0 left-0 z-[90] w-72 max-w-[85vw] bg-surface p-5 overflow-y-auto
+                  transform transition-transform -translate-x-full
+                  lg:static lg:z-auto lg:w-64 lg:max-w-none lg:p-0 lg:overflow-visible
+                  lg:transform-none lg:transition-none lg:translate-x-0 shrink-0"
+           :class="filtersOpen && 'translate-x-0'">
+
+      <!-- Шапка панели (только мобайл) -->
+      <div class="flex items-center justify-between mb-4 lg:hidden">
+        <span class="text-[13px] font-bold text-primary uppercase tracking-widest">Фильтры</span>
+        <button type="button" @click="filtersOpen = false" title="Закрыть"
+                class="w-8 h-8 flex items-center justify-center text-muted hover:text-accent">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+            <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+
       <form id="filter-form"
             hx-get="{{ request.path }}"
             hx-target="#product-grid-section"
@@ -53,6 +74,13 @@
         </a>
 
       </form>
+
+      <!-- Применить (только мобайл; фильтры и так применяются сразу) -->
+      <button type="button" @click="filtersOpen = false"
+              class="btn-accent w-full mt-5 lg:hidden">
+        Показать товары
+      </button>
+
       {% include "catalog/_facet_deps.html" %}
     </aside>
 

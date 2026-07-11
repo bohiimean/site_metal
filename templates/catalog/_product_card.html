@@ -46,7 +46,7 @@
     {% endif %}
 
     <div class="flex items-center justify-between gap-2 mt-auto pt-2">
-      <span class="text-[12px] font-semibold text-muted">Цена по запросу</span>
+      <span class="text-[12px] font-semibold text-muted whitespace-nowrap"><span class="hidden sm:inline">Цена по запросу</span><span class="sm:hidden">По запросу</span></span>
       <button
         class="btn-accent text-[10px] px-3 py-2 shrink-0"
         @click="$store.cart.add({
