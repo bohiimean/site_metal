@@ -214,6 +214,19 @@ def _product_detail(request, product):
     )
     images = list(product.images.order_by('sort_order'))
 
+    # Данные изображений для Alpine (смена фото, srcset, лайтбокс).
+    # gallery/zoom вписывают предмет целиком (ResizeToFit), без обрезки.
+    images_data = []
+    for img in images:
+        try:
+            images_data.append({
+                'thumb':   img.thumb.url,
+                'gallery': img.gallery.url,
+                'zoom':    img.zoom.url,
+            })
+        except Exception:
+            continue  # исходный файл недоступен — пропускаем
+
     variants_data = []
     for v in variants_qs:
         variants_data.append({
@@ -270,7 +283,7 @@ def _product_detail(request, product):
     color_images = {}
     for ci in product.color_images.select_related('color'):
         try:
-            urls = {'card': ci.card.url, 'gallery': ci.gallery.url}
+            urls = {'card': ci.card.url, 'gallery': ci.gallery.url, 'zoom': ci.zoom.url}
         except Exception:
             continue
         if ci.color_id:
@@ -281,6 +294,7 @@ def _product_detail(request, product):
     return render(request, 'catalog/product_detail.html', {
         'product':            product,
         'images':             images,
+        'images_json':        images_data,
         'variants_json':      variants_data,
         'combinations_json':  combinations,
         'finish_colors_json': finish_colors,

@@ -5,6 +5,7 @@ from imagekit.models import ImageSpecField
 from imagekit.processors import ResizeToFill, ResizeToFit
 
 from apps.references.models import Material, SteelGrade, Finish, Color
+from apps.validators import IMAGE_UPLOAD_VALIDATORS, UPLOAD_HELP_TEXT
 
 
 class Category(MP_Node):
@@ -12,7 +13,8 @@ class Category(MP_Node):
     slug = models.SlugField('Slug', max_length=200, unique=True)
     image = models.ImageField(
         'Изображение', upload_to='categories/', blank=True,
-        help_text='Для карточки на странице «Продукция»',
+        validators=IMAGE_UPLOAD_VALIDATORS,
+        help_text='Для карточки на странице «Продукция». ' + UPLOAD_HELP_TEXT,
     )
     seo_title = models.CharField('SEO Title', max_length=200, blank=True)
     seo_description = models.TextField('SEO Description', blank=True)
@@ -117,10 +119,17 @@ class ProductImage(models.Model):
         related_name='images',
         verbose_name='Товар',
     )
-    image = models.ImageField('Изображение', upload_to='products/original/')
+    image = models.ImageField(
+        'Изображение', upload_to='products/original/',
+        validators=IMAGE_UPLOAD_VALIDATORS,
+        help_text=UPLOAD_HELP_TEXT,
+    )
     sort_order = models.PositiveIntegerField('Порядок', default=0)
 
-    # Пресеты (WebP) — генерируются лениво при первом обращении
+    # Пресеты (WebP) — генерируются лениво при первом обращении.
+    # thumb/card кадрируют (ResizeToFill) — для миниатюр и сетки это ок;
+    # gallery/zoom вписывают целиком (ResizeToFit) — на карточке товара
+    # предмет должен быть виден полностью, без обрезки.
     thumb = ImageSpecField(
         source='image',
         processors=[ResizeToFill(120, 90)],
@@ -133,9 +142,15 @@ class ProductImage(models.Model):
         format='WEBP',
         options={'quality': 85},
     )
+    card_2x = ImageSpecField(
+        source='image',
+        processors=[ResizeToFill(1200, 900)],
+        format='WEBP',
+        options={'quality': 82},
+    )
     gallery = ImageSpecField(
         source='image',
-        processors=[ResizeToFill(1000, 750)],
+        processors=[ResizeToFit(1000, 750)],
         format='WEBP',
         options={'quality': 90},
     )
@@ -177,7 +192,11 @@ class ProductColorImage(models.Model):
         choices=Color.COLOR_GROUP_CHOICES, blank=True,
         help_text='Или одно фото на всю группу (синие, серые, …)',
     )
-    image = models.ImageField('Изображение', upload_to='products/colors/')
+    image = models.ImageField(
+        'Изображение', upload_to='products/colors/',
+        validators=IMAGE_UPLOAD_VALIDATORS,
+        help_text=UPLOAD_HELP_TEXT,
+    )
 
     thumb = ImageSpecField(
         source='image',
@@ -193,7 +212,7 @@ class ProductColorImage(models.Model):
     )
     gallery = ImageSpecField(
         source='image',
-        processors=[ResizeToFill(1000, 750)],
+        processors=[ResizeToFit(1000, 750)],
         format='WEBP',
         options={'quality': 90},
     )

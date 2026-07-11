@@ -2,6 +2,8 @@ from django.db import models
 from imagekit.models import ImageSpecField
 from imagekit.processors import ResizeToFill
 
+from apps.validators import IMAGE_UPLOAD_VALIDATORS, UPLOAD_HELP_TEXT
+
 
 class Material(models.Model):
     name = models.CharField('Название', max_length=100)
@@ -13,7 +15,8 @@ class Material(models.Model):
     )
     image = models.ImageField(
         'Изображение', upload_to='materials/', blank=True,
-        help_text='Для карточки основного раздела на странице «Продукция»',
+        validators=IMAGE_UPLOAD_VALIDATORS,
+        help_text='Для карточки основного раздела на странице «Продукция». ' + UPLOAD_HELP_TEXT,
     )
     is_active = models.BooleanField('Активен', default=True)
 

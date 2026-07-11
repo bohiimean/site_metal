@@ -6,6 +6,8 @@
   <a href="{% url 'catalog:detail' product.slug %}" class="block relative" style="aspect-ratio:4/3">
     {% if image and image.image %}
       <img src="{{ image.card.url }}"
+           srcset="{{ image.card.url }} 600w, {{ image.card_2x.url }} 1200w"
+           sizes="(min-width:1280px) 240px, (min-width:1024px) 20vw, (min-width:640px) 33vw, 50vw"
            alt="{{ product.name }}"
            class="w-full h-full object-cover"
            loading="lazy">

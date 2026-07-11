@@ -10,7 +10,7 @@
           Металлы и профили оптом.<br>
           Более 3 000 позиций.
         </p>
-        <p class="text-[12px] text-muted mt-3">+7 (495) 540-51-17</p>
+        <p class="text-[12px] text-muted mt-3">+7 (977) 745-54-55</p>
       </div>
 
       <div>
@@ -38,7 +38,7 @@
 
     <div class="border-t border-white/10 mt-10 pt-6 flex flex-col sm:flex-row justify-between gap-2 text-[11px] text-muted">
       {% if site.footer_copyright %}<p>{% now "Y" %} © {{ site.footer_copyright }}</p>{% endif %}
-      {% if site.footer_legal %}<p>{{ site.footer_legal }}</p>{% endif %}
+      {% if site.footer_legal %}<p class="sm:text-right">{{ site.footer_legal|linebreaksbr }}</p>{% endif %}
     </div>
   </div>
 </footer>

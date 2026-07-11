@@ -7,6 +7,7 @@
 
 {% block extra_head %}
 <script type="application/ld+json">{{ schema_org|safe }}</script>
+{{ images_json|json_script:"images-data" }}
 {{ variants_json|json_script:"variants-data" }}
 {{ combinations_json|json_script:"combinations-data" }}
 {{ finish_colors_json|json_script:"finish-colors-data" }}
@@ -37,15 +38,25 @@
 
     <!-- ─── Изображения ─── -->
     <div>
-      <div class="relative rounded-md overflow-hidden bg-surface-alt h-[420px]">
+      <!-- Фото вписывается целиком (object-contain) на нейтральном фоне —
+           длинный предмет не обрезается. Клик — раскрытие на весь экран. -->
+      <!-- Бокс намеренно ничем не выделен (без фона-подложки и обводки):
+           белый фон товарных фото сливается со страницей -->
+      <div class="group relative overflow-hidden h-[420px]">
         <template x-if="displayImage">
-          <img :src="displayImage" :alt="'{{ product.name|escapejs }}'"
-               class="w-full h-full object-cover">
+          <img :src="displayImage" :srcset="displaySrcset"
+               sizes="(min-width:1024px) 520px, 100vw"
+               :alt="'{{ product.name|escapejs }}'"
+               @click="displayImage && (lightboxOpen = true)"
+               class="w-full h-full object-contain p-2 cursor-zoom-in">
         </template>
         <template x-if="!displayImage">
           {% if images %}
-            <img src="{{ images.0.gallery.url }}" alt="{{ product.name }}"
-                 class="w-full h-full object-cover">
+            <img src="{{ images.0.gallery.url }}"
+                 srcset="{{ images.0.gallery.url }} 1000w, {{ images.0.zoom.url }} 2000w"
+                 sizes="(min-width:1024px) 520px, 100vw"
+                 alt="{{ product.name }}"
+                 class="w-full h-full object-contain p-2">
           {% else %}
             <div class="img-placeholder w-full h-full">
               {{ product.profile_code|default:product.name }}
@@ -53,9 +64,21 @@
           {% endif %}
         </template>
 
-        <!-- Подпись поверх фото -->
-        <div class="absolute bottom-3 left-3 right-3 text-[10px] font-mono text-muted pointer-events-none">
-          <span x-text="photoCaption"></span>
+        <!-- Кнопка-подсказка «развернуть» -->
+        <template x-if="displayImage">
+          <button @click="lightboxOpen = true" title="Открыть на весь экран"
+                  class="absolute top-3 right-3 w-8 h-8 flex items-center justify-center rounded-sm bg-surface/80 backdrop-blur text-muted opacity-0 group-hover:opacity-100 transition-opacity hover:text-accent">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+              <path d="M9 4H4v5M15 4h5v5M15 20h5v-5M9 20H4v-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+        </template>
+
+        <!-- Подпись поверх фото (на подложке — фон может быть светлым) -->
+        <div class="absolute bottom-2 left-2 right-2 pointer-events-none">
+          <span x-show="photoCaption" x-cloak
+                class="inline-block text-[10px] font-mono text-muted bg-surface/80 backdrop-blur px-2 py-1 rounded-sm"
+                x-text="photoCaption"></span>
         </div>
       </div>
 
@@ -63,10 +86,10 @@
       {% if images|length > 1 %}
       <div class="flex gap-2 mt-2.5">
         {% for img in images %}
-          <button @click="setImage('{{ img.gallery.url }}')"
-                  class="w-16 h-16 rounded-sm overflow-hidden border-2 transition-colors flex-shrink-0"
-                  :class="activeThumb === '{{ img.gallery.url }}' ? 'border-accent' : 'border-border'">
-            <img src="{{ img.thumb.url }}" alt="" class="w-full h-full object-cover">
+          <button @click="selectImageIndex({{ forloop.counter0 }})"
+                  class="w-16 h-16 rounded-sm overflow-hidden border-2 transition-colors flex-shrink-0 bg-surface"
+                  :class="(activeIndex === {{ forloop.counter0 }} && !selColor) ? 'border-accent' : 'border-border'">
+            <img src="{{ img.thumb.url }}" alt="" class="w-full h-full object-contain p-0.5">
           </button>
         {% endfor %}
       </div>
@@ -370,6 +393,25 @@
 
     </div>
   </div>
+
+  <!-- ─── Просмотр фото: модалка по центру ─── -->
+  <div x-show="lightboxOpen" x-cloak
+       x-transition.opacity
+       @keydown.escape.window="lightboxOpen = false"
+       @click="lightboxOpen = false"
+       class="fixed inset-0 z-[100] bg-black/70 flex items-center justify-center p-4">
+    <div @click.stop x-show="lightboxOpen" x-transition
+         class="relative bg-surface rounded-lg shadow-2xl p-4 max-w-[640px] w-full">
+      <img :src="displayZoom" :alt="'{{ product.name|escapejs }}'"
+           class="w-full max-h-[70vh] object-contain">
+      <button @click="lightboxOpen = false" title="Закрыть"
+              class="absolute -top-3 -right-3 w-9 h-9 flex items-center justify-center rounded-full bg-surface border border-border shadow-md text-muted hover:text-accent transition-colors">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+          <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+        </svg>
+      </button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -378,11 +420,13 @@ function productVariants() {
     variants:     [],
     combinations: [],
     finishColors: {},   // {finish_id: [{id, name, hex, ral_code, group}]}
-    colorImages:  {},   // {"color:<id>"|"group:<key>": {card, gallery}}
+    colorImages:  {},   // {"color:<id>"|"group:<key>": {card, gallery, zoom}}
+    images:       [],   // [{thumb, gallery, zoom}] — фото товара по порядку
     sel: { material_id: null, steel_grade_id: null, finish_id: null, length_m: null },
     selColor:     null, // цвет — параметр заказа, в комбинации вариантов не входит
     current:      null,
-    activeThumb:  null,
+    activeIndex:  0,    // индекс выбранной миниатюры в images
+    lightboxOpen: false,
 
     // Своя длина — параметр заказа (для вариантов с allow_custom_length)
     customLenActive: false,
@@ -400,10 +444,17 @@ function productVariants() {
     customLastText:  '',
 
     init() {
+      this.images       = JSON.parse(document.getElementById('images-data').textContent);
       this.variants     = JSON.parse(document.getElementById('variants-data').textContent);
       this.combinations = JSON.parse(document.getElementById('combinations-data').textContent);
       this.finishColors = JSON.parse(document.getElementById('finish-colors-data').textContent);
       this.colorImages  = JSON.parse(document.getElementById('color-images-data').textContent);
+
+      // Предзагрузка фото цветов, чтобы переключение не мигало
+      Object.values(this.colorImages).forEach(u => {
+        if (u.gallery) { const img = new Image(); img.src = u.gallery; }
+      });
+
       if (!this.variants.length) return;
 
       const params = new URLSearchParams(location.search);
@@ -416,11 +467,6 @@ function productVariants() {
       if (colorId && this.uniqueColors.some(c => c.id === colorId)) {
         this.selColor = colorId;
       }
-
-      // Предзагрузка фото цветов, чтобы переключение не мигало
-      Object.values(this.colorImages).forEach(u => {
-        if (u.gallery) { const img = new Image(); img.src = u.gallery; }
-      });
 
       // Реакция на back/forward — переставить вариант по sku из URL
       window.addEventListener('popstate', () => {
@@ -520,8 +566,8 @@ function productVariants() {
       this._autoSelect();
       this.customLenActive = true; // _pickVariant перезаписывает sel — восстанавливаем флаг
     },
-    setImage(url) {
-      this.activeThumb = url;
+    selectImageIndex(i) {
+      this.activeIndex = i;
       this.selColor = null; // ручной выбор фото сбрасывает цветовое
     },
 
@@ -560,16 +606,34 @@ function productVariants() {
       });
     },
 
-    // ── Картинка: точный цвет → группа цвета → активная миниатюра → дефолт ──
-    get displayImage() {
+    // ── Картинка: точный цвет → группа цвета → выбранная миниатюра → дефолт ──
+    // Возвращает объект {gallery, zoom} либо null.
+    get currentImage() {
       if (this.selColor) {
         const c     = this.uniqueColors.find(x => x.id === this.selColor);
         const exact = this.colorImages['color:' + this.selColor];
         const grp   = c && c.group ? this.colorImages['group:' + c.group] : null;
         const hit   = exact || grp;
-        if (hit && hit.gallery) return hit.gallery;
+        if (hit && hit.gallery) return hit;
       }
-      return this.activeThumb;
+      return this.images[this.activeIndex] || this.images[0] || null;
+    },
+
+    get displayImage() {
+      const img = this.currentImage;
+      return img ? img.gallery : null;
+    },
+
+    get displaySrcset() {
+      const img = this.currentImage;
+      if (!img) return '';
+      const zoom = img.zoom || img.gallery;
+      return img.gallery + ' 1000w, ' + zoom + ' 2000w';
+    },
+
+    get displayZoom() {
+      const img = this.currentImage;
+      return img ? (img.zoom || img.gallery) : null;
     },
 
     get photoCaption() {
