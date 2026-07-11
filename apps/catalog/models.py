@@ -28,8 +28,9 @@ class Category(MP_Node):
         options={'quality': 85},
     )
 
-    # node_order_by не задаём намеренно: порядок категорий ручной
-    # (drag в TreeAdmin) — он определяет порядок карточек на «Продукции»
+    # node_order_by не задаём намеренно: порядок категорий ручной —
+    # задаётся в админке полями «Position»/«Relative to» (movenodeform)
+    # и определяет порядок карточек на «Продукции»
 
     class Meta:
         verbose_name = 'Категория'

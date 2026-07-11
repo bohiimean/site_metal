@@ -7,24 +7,44 @@ from django.shortcuts import get_object_or_404
 from django.urls import reverse
 from django.utils.html import format_html
 from unfold.admin import ModelAdmin, TabularInline
-from treebeard.admin import TreeAdmin
+from unfold.widgets import SELECT_CLASSES
 from treebeard.forms import movenodeform_factory
 
 from apps.references.models import SteelGrade, Material, Finish
 from .models import Category, Product, ProductImage, ProductColorImage, ProductVariant
 
 
+# Treebeard TreeAdmin несовместим с unfold (битая разметка таблицы, drag&drop
+# рассчитан на классическую админку). Поэтому категории — обычный unfold
+# ModelAdmin, а дерево управляется полями формы movenodeform:
+# «Position» + «Relative to» (сосед/родитель). Дерево мелкое, правится редко.
+_CategoryBaseForm = movenodeform_factory(Category)
+
+
+class CategoryAdminForm(_CategoryBaseForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Служебные селекты treebeard — не модельные поля, unfold их сам
+        # не стилизует; навешиваем его классы вручную
+        for name in ('treebeard_position', 'treebeard_ref_node'):
+            if name in self.fields:
+                self.fields[name].widget.attrs['class'] = ' '.join(SELECT_CLASSES)
+
+
 @admin.register(Category)
-class CategoryAdmin(TreeAdmin):
-    # TreeAdmin не наследует unfold.admin.ModelAdmin (см. CLAUDE.md/известное
-    # ограничение), поэтому unfold-атрибуты вроде show_add_link нужно
-    # прописывать вручную — иначе шаблон add_link.html молча скрывает кнопку.
-    show_add_link = True
-    form = movenodeform_factory(Category)
-    list_display = ['name', 'slug', 'image_preview', 'is_active']
+class CategoryAdmin(ModelAdmin):
+    form = CategoryAdminForm
+    list_display = ['tree_name', 'slug', 'image_preview', 'is_active']
     list_editable = ['is_active']
     prepopulated_fields = {'slug': ('name',)}
     search_fields = ['name', 'slug']
+    ordering = ['path']  # порядок дерева (и карточек на «Продукции»)
+
+    def tree_name(self, obj):
+        indent = '— ' * (obj.depth - 1)
+        return f'{indent}{obj.name}'
+    tree_name.short_description = 'Название'
+    tree_name.admin_order_field = 'path'
 
     def image_preview(self, obj):
         if obj.image:
