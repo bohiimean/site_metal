@@ -75,8 +75,14 @@
               <template x-for="item in $store.cart.items" :key="item.key">
                 <div class="flex gap-3 py-[14px] border-b border-border last:border-0">
 
-                  <!-- Плейсхолдер фото -->
-                  <div class="w-16 h-16 shrink-0 rounded-sm img-placeholder"></div>
+                  <!-- Фото (если товар добавлен без картинки — плейсхолдер) -->
+                  <template x-if="item.image">
+                    <img :src="item.image" alt=""
+                         class="w-16 h-16 shrink-0 rounded-sm object-cover bg-surface-alt">
+                  </template>
+                  <template x-if="!item.image">
+                    <div class="w-16 h-16 shrink-0 rounded-sm img-placeholder"></div>
+                  </template>
 
                   <div class="flex-1 min-w-0">
                     <p class="text-[12.5px] font-semibold text-primary leading-snug mb-0.5 line-clamp-2"

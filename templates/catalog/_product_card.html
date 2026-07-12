@@ -54,7 +54,8 @@
           slug: '{{ product.slug }}',
           sku:  '{{ variant.sku|default:''|escapejs }}',
           qty:  1,
-          unit:  '{{ variant.get_unit_display|default:''|escapejs }}'
+          unit:  '{{ variant.get_unit_display|default:''|escapejs }}',
+          image: {% if image and image.image %}'{{ image.thumb.url }}'{% else %}null{% endif %}
         })">
         Заказать
       </button>

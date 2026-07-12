@@ -763,12 +763,14 @@ function productVariants() {
     addCurrentToCart() {
       if (!this.current) return;
       const v = this.current;
+      const ci = this.currentImage; // фото товара {thumb,...} или цветовое {card,...}
       const item = {
         name:   '{{ product.name|escapejs }}',
         slug:   '{{ product.slug }}',
         sku:    v.sku,
         qty:    1,
         unit:   v.unit_display,
+        image:  ci ? (ci.thumb || ci.card) : null,
         color:  this.selectedColorName || null,
         length: (this.customLenActive && this.customLen)
                   ? this.customLen + ' м' : null,
