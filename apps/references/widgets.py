@@ -41,8 +41,18 @@ class GroupedColorCheckboxWidget(CheckboxSelectMultiple):
             key = color.color_group or ''
             groups.setdefault(key, []).append(color)
 
+        picker_id = f'grouped-colors-{name}'
+        btn_style = (
+            'font-size:11px;padding:3px 10px;border:1px solid #d1d5db;'
+            'border-radius:6px;background:transparent;color:#888;cursor:pointer;'
+        )
         lines = [
-            '<div style="display:flex;flex-wrap:wrap;gap:20px 28px;margin-top:6px;">'
+            f'<div id="{picker_id}">',
+            f'<div style="display:flex;gap:8px;margin-top:6px;">'
+            f'<button type="button" data-check-all style="{btn_style}">Выбрать все</button>'
+            f'<button type="button" data-uncheck-all style="{btn_style}">Снять все</button>'
+            f'</div>',
+            '<div style="display:flex;flex-wrap:wrap;gap:20px 28px;margin-top:12px;">',
         ]
 
         for key in GROUP_ORDER:
@@ -50,9 +60,12 @@ class GroupedColorCheckboxWidget(CheckboxSelectMultiple):
                 continue
             label = GROUP_LABELS.get(key, key)
             lines.append(
-                f'<div style="min-width:160px;">'
+                f'<div style="min-width:160px;" data-color-group>'
                 f'<p style="font-size:11px;font-weight:600;text-transform:uppercase;'
-                f'letter-spacing:.06em;color:#888;margin:0 0 6px;">{label}</p>'
+                f'letter-spacing:.06em;color:#888;margin:0 0 6px;">{label} '
+                f'<button type="button" data-group-toggle '
+                f'style="border:0;padding:0;background:none;color:#4f8ef7;'
+                f'font-size:10px;text-transform:none;letter-spacing:0;cursor:pointer;">все</button></p>'
                 f'<div style="display:flex;flex-direction:column;gap:5px;">'
             )
             for color in groups[key]:
@@ -70,7 +83,28 @@ class GroupedColorCheckboxWidget(CheckboxSelectMultiple):
                 )
             lines.append('</div></div>')
 
-        lines.append('</div>')
+        lines.append('</div></div>')
+        lines.append(
+            f'''<script>
+(function() {{
+  var root = document.getElementById('{picker_id}');
+  if (!root) return;
+  function setAll(scope, state) {{
+    scope.querySelectorAll('input[type=checkbox]').forEach(function(cb) {{ cb.checked = state; }});
+  }}
+  root.querySelector('[data-check-all]').addEventListener('click', function() {{ setAll(root, true); }});
+  root.querySelector('[data-uncheck-all]').addEventListener('click', function() {{ setAll(root, false); }});
+  root.querySelectorAll('[data-group-toggle]').forEach(function(btn) {{
+    btn.addEventListener('click', function() {{
+      var grp = btn.closest('[data-color-group]');
+      var cbs = grp.querySelectorAll('input[type=checkbox]');
+      var anyUnchecked = Array.prototype.some.call(cbs, function(cb) {{ return !cb.checked; }});
+      setAll(grp, anyUnchecked);
+    }});
+  }});
+}})();
+</script>'''
+        )
         return mark_safe(''.join(lines))
 
     def value_from_datadict(self, data, files, name):
