@@ -11,7 +11,7 @@ from unfold.widgets import SELECT_CLASSES
 from treebeard.forms import movenodeform_factory
 
 from apps.references.models import SteelGrade, Material, Finish
-from .models import Category, Product, ProductImage, ProductColorImage, ProductVariant
+from .models import Category, Product, ProductImage, ProductVariant
 
 
 # Treebeard TreeAdmin несовместим с unfold (битая разметка таблицы, drag&drop
@@ -59,27 +59,14 @@ class CategoryAdmin(ModelAdmin):
 class ProductImageInline(TabularInline):
     model = ProductImage
     extra = 0
-    fields = ['image', 'sort_order', 'thumb_preview']
-    readonly_fields = ['thumb_preview']
-    ordering_field = 'sort_order'
-
-    def thumb_preview(self, obj):
-        if obj.pk and obj.image:
-            try:
-                return format_html('<img src="{}" style="height:60px;">', obj.thumb.url)
-            except Exception:
-                pass
-        return '—'
-    thumb_preview.short_description = 'Превью'
-
-
-class ProductColorImageInline(TabularInline):
-    model = ProductColorImage
-    extra = 0
-    fields = ['color', 'color_group', 'image', 'thumb_preview']
+    fields = ['image', 'finish', 'color', 'color_group', 'sort_order', 'thumb_preview']
     readonly_fields = ['thumb_preview']
     autocomplete_fields = ['color']
-    verbose_name_plural = 'Фото по цветам (точный цвет ИЛИ группа; fallback: цвет → группа → фото товара)'
+    ordering_field = 'sort_order'
+    verbose_name_plural = (
+        'Изображения (обработка/цвет/группа пустые — фото галереи; '
+        'заполнены — фото при выборе; точное побеждает общее)'
+    )
 
     def thumb_preview(self, obj):
         if obj.pk and obj.image:
@@ -101,7 +88,7 @@ class ProductAdmin(ModelAdmin):
     search_fields = ['name', 'slug', 'profile_code']
     prepopulated_fields = {'slug': ('name',)}
     autocomplete_fields = ['category']
-    inlines = [ProductImageInline, ProductColorImageInline]
+    inlines = [ProductImageInline]
     fieldsets = [
         (None, {'fields': ['name', 'slug', 'category', 'profile_code', 'is_new', 'is_active']}),
         ('Описание', {'fields': ['description']}),

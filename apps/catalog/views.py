@@ -212,7 +212,7 @@ def _product_detail(request, product):
         .select_related('material', 'steel_grade', 'finish')
         .order_by('sku')
     )
-    images = list(product.images.order_by('sort_order'))
+    images = list(product.images.gallery().order_by('sort_order'))
 
     # Данные изображений для Alpine (смена фото, srcset, лайтбокс).
     # gallery/zoom вписывают предмет целиком (ResizeToFit), без обрезки.
@@ -278,18 +278,34 @@ def _product_detail(request, product):
                 'group':    c.color_group,
             })
 
-    # Карта «цвет → фото»: точный цвет приоритетнее группы;
-    # fallback до дефолтного фото товара — на клиенте
+    # Карта «обработка/цвет → фото». Ключи (клиент перебирает от точного
+    # к общему: обработка+цвет → обработка+группа → цвет → группа → обработка):
+    #   finish:<fid>|color:<cid> / finish:<fid>|group:<g> /
+    #   color:<cid> / group:<g> / finish:<fid>
     color_images = {}
-    for ci in product.color_images.select_related('color'):
+    for ci in product.images.overrides().select_related('color'):
         try:
-            urls = {'card': ci.card.url, 'gallery': ci.gallery.url, 'zoom': ci.zoom.url}
+            urls = {
+                'thumb':   ci.thumb.url,
+                'card':    ci.card.url,
+                'gallery': ci.gallery.url,
+                'zoom':    ci.zoom.url,
+            }
         except Exception:
             continue
         if ci.color_id:
-            color_images[f'color:{ci.color_id}'] = urls
+            suffix = f'color:{ci.color_id}'
         elif ci.color_group:
-            color_images[f'group:{ci.color_group}'] = urls
+            suffix = f'group:{ci.color_group}'
+        else:
+            suffix = ''
+        if ci.finish_id and suffix:
+            key = f'finish:{ci.finish_id}|{suffix}'
+        elif ci.finish_id:
+            key = f'finish:{ci.finish_id}'
+        else:
+            key = suffix
+        color_images[key] = urls
 
     return render(request, 'catalog/product_detail.html', {
         'product':            product,

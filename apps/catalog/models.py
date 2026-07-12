@@ -60,7 +60,7 @@ class ProductQuerySet(models.QuerySet):
             .prefetch_related(
                 Prefetch(
                     'images',
-                    queryset=ProductImage.objects.order_by('sort_order'),
+                    queryset=ProductImage.objects.gallery().order_by('sort_order'),
                     to_attr='prefetched_images',
                 ),
                 Prefetch(
@@ -111,10 +111,27 @@ class Product(models.Model):
             })
 
     def get_first_image(self):
-        return self.images.order_by('sort_order').first()
+        return self.images.gallery().order_by('sort_order').first()
+
+
+class ProductImageQuerySet(models.QuerySet):
+    def gallery(self):
+        """Обычные фото товара (листаются миниатюрами)."""
+        return self.filter(finish__isnull=True, color__isnull=True, color_group='')
+
+    def overrides(self):
+        """Фото под обработку/цвет — подменяют галерею при выборе на карточке."""
+        return self.exclude(finish__isnull=True, color__isnull=True, color_group='')
 
 
 class ProductImage(models.Model):
+    """Фото товара. Роль строки определяется заполненными полями:
+
+    - finish/color/группа пустые — обычное фото галереи (порядок — sort_order);
+    - заполнены — фото, показываемое при выборе на карточке.
+    Fallback-цепочка на клиенте (от точного к общему):
+    обработка+цвет → обработка+группа → цвет → группа → обработка → галерея.
+    """
     product = models.ForeignKey(
         Product, on_delete=models.CASCADE,
         related_name='images',
@@ -125,7 +142,26 @@ class ProductImage(models.Model):
         validators=IMAGE_UPLOAD_VALIDATORS,
         help_text=UPLOAD_HELP_TEXT,
     )
+    finish = models.ForeignKey(
+        Finish, on_delete=models.CASCADE,
+        null=True, blank=True,
+        verbose_name='Обработка',
+        help_text='Фото для этой обработки',
+    )
+    color = models.ForeignKey(
+        Color, on_delete=models.CASCADE,
+        null=True, blank=True,
+        verbose_name='Цвет',
+        help_text='Фото под конкретный цвет',
+    )
+    color_group = models.CharField(
+        'Группа цветов', max_length=20,
+        choices=Color.COLOR_GROUP_CHOICES, blank=True,
+        help_text='Или одно фото на всю группу (синие, серые, …)',
+    )
     sort_order = models.PositiveIntegerField('Порядок', default=0)
+
+    objects = ProductImageQuerySet.as_manager()
 
     # Пресеты (WebP) — генерируются лениво при первом обращении.
     # thumb/card кадрируют (ResizeToFill) — для миниатюр и сетки это ок;
@@ -166,88 +202,44 @@ class ProductImage(models.Model):
         verbose_name = 'Изображение'
         verbose_name_plural = 'Изображения'
         ordering = ['sort_order']
-
-    def __str__(self):
-        return f'Фото #{self.sort_order} — {self.product}'
-
-
-class ProductColorImage(models.Model):
-    """Фото товара под конкретный цвет или группу цветов.
-
-    Логика показа на карточке (fallback-цепочка):
-    точный цвет → группа цвета → дефолтное фото товара.
-    """
-    product = models.ForeignKey(
-        Product, on_delete=models.CASCADE,
-        related_name='color_images',
-        verbose_name='Товар',
-    )
-    color = models.ForeignKey(
-        Color, on_delete=models.CASCADE,
-        null=True, blank=True,
-        verbose_name='Цвет',
-        help_text='Фото под конкретный цвет',
-    )
-    color_group = models.CharField(
-        'Группа цветов', max_length=20,
-        choices=Color.COLOR_GROUP_CHOICES, blank=True,
-        help_text='Или одно фото на всю группу (синие, серые, …)',
-    )
-    image = models.ImageField(
-        'Изображение', upload_to='products/colors/',
-        validators=IMAGE_UPLOAD_VALIDATORS,
-        help_text=UPLOAD_HELP_TEXT,
-    )
-
-    thumb = ImageSpecField(
-        source='image',
-        processors=[ResizeToFill(120, 90)],
-        format='WEBP',
-        options={'quality': 85},
-    )
-    card = ImageSpecField(
-        source='image',
-        processors=[ResizeToFill(600, 450)],
-        format='WEBP',
-        options={'quality': 85},
-    )
-    gallery = ImageSpecField(
-        source='image',
-        processors=[ResizeToFit(1000, 750)],
-        format='WEBP',
-        options={'quality': 90},
-    )
-    zoom = ImageSpecField(
-        source='image',
-        processors=[ResizeToFit(2000, 2000)],
-        format='WEBP',
-        options={'quality': 92},
-    )
-
-    class Meta:
-        verbose_name = 'Фото по цвету'
-        verbose_name_plural = 'Фото по цветам'
         constraints = [
             models.UniqueConstraint(
-                fields=['product', 'color'],
+                fields=['product', 'finish', 'color'],
                 condition=models.Q(color__isnull=False),
-                name='uniq_product_color_image',
+                nulls_distinct=False,
+                name='uniq_product_image_finish_color',
+                violation_error_message='Фото для этой пары «обработка + цвет» уже есть.',
             ),
             models.UniqueConstraint(
-                fields=['product', 'color_group'],
+                fields=['product', 'finish', 'color_group'],
                 condition=~models.Q(color_group=''),
-                name='uniq_product_color_group_image',
+                nulls_distinct=False,
+                name='uniq_product_image_finish_group',
+                violation_error_message='Фото для этой пары «обработка + группа цветов» уже есть.',
+            ),
+            models.UniqueConstraint(
+                fields=['product', 'finish'],
+                condition=models.Q(
+                    finish__isnull=False, color__isnull=True, color_group='',
+                ),
+                name='uniq_product_image_finish_only',
+                violation_error_message='Фото для этой обработки (без цвета) уже есть.',
             ),
         ]
 
     def __str__(self):
-        target = self.color or self.get_color_group_display() or '?'
-        return f'{self.product} — {target}'
+        target = ', '.join(
+            str(p) for p in (self.finish, self.color or self.get_color_group_display())
+            if p
+        )
+        if target:
+            return f'{self.product} — {target}'
+        return f'Фото #{self.sort_order} — {self.product}'
 
     def clean(self):
-        if bool(self.color_id) == bool(self.color_group):
+        if self.color_id and self.color_group:
             raise ValidationError(
-                'Укажите ровно одно: конкретный цвет ИЛИ группу цветов.'
+                'Укажите либо конкретный цвет, либо группу цветов — не оба сразу.'
             )
 
     def save(self, *args, **kwargs):

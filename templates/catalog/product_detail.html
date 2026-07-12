@@ -420,7 +420,7 @@ function productVariants() {
     variants:     [],
     combinations: [],
     finishColors: {},   // {finish_id: [{id, name, hex, ral_code, group}]}
-    colorImages:  {},   // {"color:<id>"|"group:<key>": {card, gallery, zoom}}
+    colorImages:  {},   // {"finish:<id>|color:<id>"|"color:<id>"|"group:<key>"|"finish:<id>"…: {thumb, card, gallery, zoom}}
     images:       [],   // [{thumb, gallery, zoom}] — фото товара по порядку
     sel: { material_id: null, steel_grade_id: null, finish_id: null, length_m: null },
     selColor:     null, // цвет — параметр заказа, в комбинации вариантов не входит
@@ -606,14 +606,22 @@ function productVariants() {
       });
     },
 
-    // ── Картинка: точный цвет → группа цвета → выбранная миниатюра → дефолт ──
+    // ── Картинка, от точного к общему: обработка+цвет → обработка+группа →
+    // цвет → группа → обработка → выбранная миниатюра галереи.
     // Возвращает объект {gallery, zoom} либо null.
     get currentImage() {
+      const f = this.sel.finish_id;
+      const keys = [];
       if (this.selColor) {
-        const c     = this.uniqueColors.find(x => x.id === this.selColor);
-        const exact = this.colorImages['color:' + this.selColor];
-        const grp   = c && c.group ? this.colorImages['group:' + c.group] : null;
-        const hit   = exact || grp;
+        const c = this.uniqueColors.find(x => x.id === this.selColor);
+        if (f)             keys.push('finish:' + f + '|color:' + this.selColor);
+        if (f && c && c.group) keys.push('finish:' + f + '|group:' + c.group);
+        keys.push('color:' + this.selColor);
+        if (c && c.group)  keys.push('group:' + c.group);
+      }
+      if (f) keys.push('finish:' + f);
+      for (const k of keys) {
+        const hit = this.colorImages[k];
         if (hit && hit.gallery) return hit;
       }
       return this.images[this.activeIndex] || this.images[0] || null;
