@@ -540,13 +540,17 @@ function productVariants() {
     selectFinish(id) {
       this.sel.finish_id = id;
       this.sel.length_m  = null;
-      this.selColor = null;
       this.customLenActive = false;
       this.customLen = '';
       this.ralOpen = false;
       this.customOpen = false;
       this.customSubmitted = false;
       this._autoSelect();
+      // Цвет сохраняем, если он есть и в палитре новой обработки
+      // (_autoSelect мог сменить обработку ещё раз — проверяем по факту)
+      if (this.selColor && !this.uniqueColors.some(c => c.id === this.selColor)) {
+        this.selColor = null;
+      }
     },
     selectColor(id) {
       this.selColor = (this.selColor === id) ? null : id;

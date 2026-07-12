@@ -288,7 +288,8 @@ def _product_detail(request, product):
     #   finish:<fid>|color:<cid> / finish:<fid>|group:<g> /
     #   color:<cid> / group:<g> / finish:<fid>
     color_images = {}
-    for ci in product.images.overrides().select_related('color'):
+    finish_fallbacks = {}  # первое фото каждой обработки — показ, пока цвет не выбран
+    for ci in product.images.overrides().order_by('sort_order').select_related('color'):
         try:
             urls = {
                 'thumb':   ci.thumb.url,
@@ -311,6 +312,13 @@ def _product_detail(request, product):
         else:
             key = suffix
         color_images[key] = urls
+        if ci.finish_id:
+            finish_fallbacks.setdefault(ci.finish_id, urls)
+
+    # Если у обработки нет своего фото «без цвета» — фоллбэком служит
+    # её первое фото (setdefault не перетирает явный ключ finish:<id>)
+    for fid, urls in finish_fallbacks.items():
+        color_images.setdefault(f'finish:{fid}', urls)
 
     return render(request, 'catalog/product_detail.html', {
         'product':            product,
