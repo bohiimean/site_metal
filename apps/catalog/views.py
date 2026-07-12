@@ -212,7 +212,12 @@ def _product_detail(request, product):
         .select_related('material', 'steel_grade', 'finish')
         .order_by('sku')
     )
+    # Миниатюры: обычные фото галереи; если менеджер загрузил только фото,
+    # привязанные к обработке/цвету, — показываем их, чтобы карточка
+    # не оставалась без фото до выбора нужной комбинации
     images = list(product.images.gallery().order_by('sort_order'))
+    if not images:
+        images = list(product.images.overrides().order_by('sort_order'))
 
     # Данные изображений для Alpine (смена фото, srcset, лайтбокс).
     # gallery/zoom вписывают предмет целиком (ResizeToFit), без обрезки.

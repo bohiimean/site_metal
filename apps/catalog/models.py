@@ -60,7 +60,7 @@ class ProductQuerySet(models.QuerySet):
             .prefetch_related(
                 Prefetch(
                     'images',
-                    queryset=ProductImage.objects.gallery().order_by('sort_order'),
+                    queryset=ProductImage.objects.gallery_first(),
                     to_attr='prefetched_images',
                 ),
                 Prefetch(
@@ -111,17 +111,31 @@ class Product(models.Model):
             })
 
     def get_first_image(self):
-        return self.images.gallery().order_by('sort_order').first()
+        return self.images.gallery_first().first()
 
 
 class ProductImageQuerySet(models.QuerySet):
+    GALLERY_Q = models.Q(finish__isnull=True, color__isnull=True, color_group='')
+
     def gallery(self):
         """Обычные фото товара (листаются миниатюрами)."""
-        return self.filter(finish__isnull=True, color__isnull=True, color_group='')
+        return self.filter(self.GALLERY_Q)
 
     def overrides(self):
         """Фото под обработку/цвет — подменяют галерею при выборе на карточке."""
-        return self.exclude(finish__isnull=True, color__isnull=True, color_group='')
+        return self.exclude(self.GALLERY_Q)
+
+    def gallery_first(self):
+        """Все фото: сначала галерея, затем привязанные к обработке/цвету.
+        Для мест, где нужно хоть какое-то фото (сетка карточек), даже если
+        менеджер загрузил только привязанные."""
+        return self.annotate(
+            _is_override=models.Case(
+                models.When(self.GALLERY_Q, then=0),
+                default=1,
+                output_field=models.IntegerField(),
+            ),
+        ).order_by('_is_override', 'sort_order')
 
 
 class ProductImage(models.Model):
