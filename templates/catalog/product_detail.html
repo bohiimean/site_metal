@@ -715,8 +715,18 @@ function productVariants() {
       return this.finishColors[this.sel.finish_id] || [];
     },
 
+    // Есть ли у товара своё фото под этот цвет (для текущей обработки)
+    _hasOwnPhoto(colorId) {
+      return !!(this.colorImages['finish:' + this.sel.finish_id + '|color:' + colorId]
+             || this.colorImages['color:' + colorId]);
+    },
+
+    // Быстрая пятёрка: первыми — цвета, под которые загружены фото товара;
+    // полная палитра («Показать всю») не меняется
     get popularColors() {
-      return this.uniqueColors.slice(0, 5);
+      const withPhoto = this.uniqueColors.filter(c => this._hasOwnPhoto(c.id));
+      const rest      = this.uniqueColors.filter(c => !this._hasOwnPhoto(c.id));
+      return withPhoto.concat(rest).slice(0, 5);
     },
 
     get availableRalFamilies() {
