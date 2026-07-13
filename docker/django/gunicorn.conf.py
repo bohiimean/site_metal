@@ -17,3 +17,10 @@ max_requests = 1000
 max_requests_jitter = 100
 
 timeout = 60
+
+# Control-socket gunicorn 26 по умолчанию создаёт в рабочей директории
+# (/app/.gunicorn/gunicorn.ctl). Контейнер бежит под непривилегированным
+# пользователем, /app ему не пишется → на каждом старте
+# «[ERROR] Control server error: Permission denied: '/app/.gunicorn'».
+# Управляющий интерфейс нам не нужен — выключаем, чтобы не засорять логи.
+control_socket_disable = True
