@@ -50,9 +50,11 @@ class SiteSettings(models.Model):
         default='Арвенокс. Все права защищены.',
         help_text='Год подставляется автоматически перед этим текстом.',
     )
-    footer_legal = models.CharField(
-        'Футер: юр. строка', max_length=200, blank=True,
+    footer_legal = models.TextField(
+        'Футер: юр. строка', max_length=300, blank=True,
         default='ИНН 7700000000 · г. Москва',
+        help_text='Каждая строка выводится в футере с новой строки '
+                  '(Enter = перенос).',
     )
 
     class Meta:

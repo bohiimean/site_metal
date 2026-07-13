@@ -16,11 +16,13 @@
       <div>
         <p class="text-[11px] font-semibold uppercase tracking-widest text-muted mb-3">Каталог</p>
         <ul class="space-y-2 text-[12px]">
-          <li><a href="/catalog/" class="hover:text-accent transition-colors">Все товары</a></li>
-          <li><a href="/catalog/profil-stalnoj/" class="hover:text-accent transition-colors">Профиль стальной</a></li>
-          <li><a href="/catalog/listovoj-metall/" class="hover:text-accent transition-colors">Листовой металл</a></li>
-          <li><a href="/catalog/latun/" class="hover:text-accent transition-colors">Латунь</a></li>
-          <li><a href="/catalog/nerzhaveika/" class="hover:text-accent transition-colors">Нержавейка</a></li>
+          <li><a href="{% url 'catalog:index' %}" class="hover:text-accent transition-colors">Все товары</a></li>
+          {% for m in footer_sections %}
+            <li><a href="{% url 'catalog:index' %}?material={{ m.pk }}" class="hover:text-accent transition-colors">{{ m.landing_title }}</a></li>
+          {% endfor %}
+          {% for c in footer_categories %}
+            <li><a href="{% url 'catalog:detail' c.slug %}" class="hover:text-accent transition-colors">{{ c.name }}</a></li>
+          {% endfor %}
         </ul>
       </div>
 
@@ -29,7 +31,6 @@
         <ul class="space-y-2 text-[12px]">
           <li><a href="/o-kompanii/" class="hover:text-accent transition-colors">О нас</a></li>
           <li><a href="/kontakty/" class="hover:text-accent transition-colors">Контакты</a></li>
-          <li><a href="/novosti/" class="hover:text-accent transition-colors">Новости</a></li>
           <li><a href="/politika-konfidentsialnosti/" class="hover:text-accent transition-colors">Политика конфиденциальности</a></li>
         </ul>
       </div>
