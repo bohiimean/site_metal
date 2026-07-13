@@ -105,3 +105,46 @@ Cron (`crontab -e` от root):
 | Статика (collectstatic) | volume `metal_static_data`, отдаёт nginx |
 | Логи приложения | `docker compose -f docker-compose.prod.yml logs web` |
 | Бэкапы БД локально | `/opt/backups/db` (14 дней) |
+
+## 6. Особенности хостов без доступа к внешним CDN (напр. Timeweb)
+
+У некоторых российских VPS сломан IPv4-маршрут до части зарубежных ресурсов,
+из-за чего сборка образа падает. Обходы уже зашиты, но знать про них полезно:
+
+- **apt** уведён на зеркало `mirror.yandex.ru` (build-arg `APT_MIRROR` в
+  `docker/django/Dockerfile`). `deb.debian.org` по IPv4 с таких хостов виснет,
+  и apt в сборке раздувается до OOM (exit 137). Переопределить зеркало:
+  `docker compose ... build --build-arg APT_MIRROR=<host> web`.
+- **Tailwind CLI** обычно качается с GitHub Releases. Если GitHub-CDN недоступен
+  по IPv4 — положите бинарник заранее в `docker/django/vendor/tailwindcss`
+  (в `.gitignore`, git его не трогает), Dockerfile возьмёт его вместо `curl`.
+  Бинарник берётся с машины с интернетом:
+  `curl -fSL -o docker/django/vendor/tailwindcss \`
+  `  https://github.com/tailwindlabs/tailwindcss/releases/download/v3.4.17/tailwindcss-linux-x64`
+  (для ARM-хоста — `...-linux-arm64`).
+- **Docker Hub** периодически отдаёт `429 Too Many Requests` на анонимные pull —
+  помогает повтор через паузу.
+- На VPS с ≤4 ГБ RAM без swap сборка ловит OOM — заведите swap (`fallocate -l
+  2G /swapfile && mkswap ... && swapon ...`, в `/etc/fstab`).
+
+Благодаря этому обновление остаётся штатным: рабочее дерево на сервере чистое,
+`git pull && docker compose -f docker-compose.prod.yml up -d --build` не
+конфликтует (бинарник Tailwind — неотслеживаемый, зеркало зашито в Dockerfile).
+
+### TLS через сертификат провайдера (вместо Let's Encrypt)
+
+Если Let's Encrypt не проходит (напр. multi-perspective валидация не достаёт
+хост из-за маршрутизации) — используйте DV-сертификат провайдера (reg.ru и т.п.):
+
+```bash
+# fullchain = сертификат + цепочка (leaf первым), privkey = приватный ключ
+cat certificate.crt certificate_ca.crt > fullchain.pem
+# положить в volume, куда смотрит nginx:
+docker run --rm -v metal_certbot_certs:/le -v "$PWD":/in nginx:1.27-alpine sh -c \
+  'mkdir -p /le/live/$DOMAIN && cp /in/fullchain.pem /le/live/$DOMAIN/ && \
+   cp /in/privkey.pem /le/live/$DOMAIN/ && chmod 600 /le/live/$DOMAIN/privkey.pem'
+docker compose -f docker-compose.prod.yml up -d
+```
+
+Такой серт **не продлевается автоматически** (certbot-контейнер его не трогает) —
+перевыпускать вручную до истечения срока.

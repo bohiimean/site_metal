@@ -12,6 +12,8 @@ venv/
 staticfiles/
 media/
 static/css/output.css
+docker/django/vendor/tailwindcss
 .idea/
 .vscode/
 .cache/
+docs/admin-guide.md
