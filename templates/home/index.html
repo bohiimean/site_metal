@@ -90,7 +90,8 @@
     </div>
   {% endif %}
 
-  <!-- Блок товаров -->
+  <!-- Блок товаров: пустые блоки не рендерим — без заглушек-«скоро» -->
+  {% if products %}
   <section class="py-9">
     <div class="max-w-7xl mx-auto px-6 lg:px-12">
 
@@ -106,27 +107,38 @@
       </div>
 
       <!-- Сетка карточек -->
-      {% if products %}
-        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {% for product in products %}
-            {% include "catalog/_product_card.html" %}
-          {% endfor %}
-        </div>
-      {% else %}
-        <p class="text-[13px] text-muted">Товары в этом разделе появятся скоро.</p>
-      {% endif %}
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {% for product in products %}
+          {% include "catalog/_product_card.html" %}
+        {% endfor %}
+      </div>
 
     </div>
   </section>
+  {% endif %}
 
 {% empty %}
-  <!-- Блоков нет — подсказка для менеджера -->
-  <div class="max-w-7xl mx-auto px-12 py-20 text-center">
-    <p class="text-muted text-[13px] mb-2">Блоки главной страницы не настроены.</p>
-    <a href="/admin/home/homeblock/add/" class="text-accent text-[12px] hover:underline">
-      Добавить блок в админке →
-    </a>
-  </div>
+  <!-- Блоков ещё нет — публичный CTA вместо пустоты (админскую подсказку не показываем посетителю) -->
+  <section class="py-16">
+    <div class="max-w-3xl mx-auto px-6 lg:px-12 text-center">
+      <h2 class="text-[24px] font-bold text-primary mb-3">
+        Широкий каталог металлопроката
+      </h2>
+      <p class="text-[14px] text-muted mb-7 leading-relaxed">
+        Профиль, листовой металл, латунь и нержавеющая сталь. Резка в размер,
+        расчёт под ваш проект — оставьте заявку, и менеджер подберёт нужное.
+      </p>
+      <div class="flex flex-wrap gap-3 justify-center">
+        <a href="{% url 'products' %}" class="btn-accent">Смотреть каталог</a>
+        <button @click="$store.callbackUI.openModal()"
+                class="inline-flex items-center gap-2 border border-border-strong text-primary
+                       px-5 py-3.5 text-xs font-semibold uppercase tracking-wide rounded
+                       hover:border-accent hover:text-accent transition-colors">
+          Связаться с менеджером
+        </button>
+      </div>
+    </div>
+  </section>
 {% endfor %}
 
 <!-- ═══════════════════════════════════════════════════

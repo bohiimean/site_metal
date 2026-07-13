@@ -82,18 +82,9 @@
         </div>
       </div>
 
-      <!-- Миниатюры -->
-      {% if images|length > 1 %}
-      <div class="flex gap-2 mt-2.5">
-        {% for img in images %}
-          <button @click="selectImageIndex({{ forloop.counter0 }})"
-                  class="w-16 h-16 rounded-sm overflow-hidden border-2 transition-colors flex-shrink-0 bg-surface"
-                  :class="(activeIndex === {{ forloop.counter0 }} && !selColor) ? 'border-accent' : 'border-border'">
-            <img src="{{ img.thumb.url }}" alt="" class="w-full h-full object-contain p-0.5">
-          </button>
-        {% endfor %}
-      </div>
-      {% endif %}
+      <!-- Миниатюры вариантов убраны намеренно: под основным фото показываем
+           только главное изображение. Смена фото по-прежнему работает при
+           выборе обработки/цвета (displayImage управляется Alpine). -->
     </div>
 
     <!-- ─── Информация о товаре ─── -->
