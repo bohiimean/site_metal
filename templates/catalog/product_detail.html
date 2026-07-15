@@ -170,9 +170,12 @@
             <template x-for="fin in uniqueFinishes" :key="fin.id">
               <button
                 @click="selectFinish(fin.id)"
-                :class="sel.finish_id === fin.id
-                  ? 'bg-accent text-accent-fg font-bold'
-                  : 'text-primary font-medium hover:text-accent'"
+                :disabled="!isValid('finish_id', fin.id)"
+                :class="{
+                  'bg-accent text-accent-fg font-bold': sel.finish_id === fin.id,
+                  'text-primary font-medium hover:text-accent': sel.finish_id !== fin.id,
+                  'opacity-30 cursor-not-allowed': !isValid('finish_id', fin.id)
+                }"
                 class="flex-1 text-center py-2.5 text-[12px] rounded-sm transition-all whitespace-nowrap"
                 x-text="fin.name">
               </button>
@@ -660,17 +663,18 @@ function productVariants() {
       return 'background:' + bg + '; box-shadow: 0 0 0 2px var(--color-surface)' + ring;
     },
 
+    // Иерархия выбора: материал → марка → обработка → размер → длина.
+    // Опцию блокируют только выборы уровней ВЫШЕ неё; всё, что ниже,
+    // переподбирается при клике (_autoSelect). Иначе выбранная обработка/размер
+    // дизейблит марку, у которой этой обработки нет, — тупик.
     isValid(field, value) {
+      const order = ['material_id', 'steel_grade_id', 'finish_id', 'size', 'length_m'];
+      const upper = order.slice(0, order.indexOf(field));
       const s = this.sel;
-      return this.combinations.some(c => {
-        if (c[field] !== value) return false;
-        if (field !== 'material_id'    && s.material_id    != null && c.material_id    !== s.material_id)    return false;
-        if (field !== 'steel_grade_id' && s.steel_grade_id != null && c.steel_grade_id !== s.steel_grade_id) return false;
-        if (field !== 'finish_id'      && s.finish_id      != null && c.finish_id      !== s.finish_id)      return false;
-        if (field !== 'size'           && s.size           != null && c.size           !== s.size)           return false;
-        if (field !== 'length_m'       && s.length_m       != null && c.length_m       !== s.length_m)       return false;
-        return true;
-      });
+      return this.combinations.some(c =>
+        c[field] === value &&
+        upper.every(f => s[f] == null || c[f] === s[f])
+      );
     },
 
     // ── Картинка, от точного к общему: обработка+цвет → обработка+группа →
