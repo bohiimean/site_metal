@@ -44,14 +44,16 @@ def _build_cart_snapshot(client_items):
         if not sku:
             continue
 
-        # color — название цвета из палитры обработки (свободная строка)
+        # color — название цвета из палитры марки стали (свободная строка)
         color = str(raw.get('color') or '')[:200].strip() or None
+        # size — свой размер клиента (для вариантов с allow_custom_size)
+        size = str(raw.get('size') or '')[:50].strip() or None
         # length — своя длина клиента (для вариантов с allow_custom_length)
         length = str(raw.get('length') or '')[:50].strip() or None
         # note — свободный комментарий (например, «свой цвет: RAL 6005»)
         note = str(raw.get('note') or '')[:MAX_STR_LEN].strip() or None
 
-        key = (sku, color, length, note)
+        key = (sku, color, size, length, note)
         if key in seen_keys:
             continue
         seen_keys.add(key)
@@ -62,7 +64,7 @@ def _build_cart_snapshot(client_items):
             qty = 1
         qty = max(1, min(qty, MAX_QTY_PER_ITEM))
 
-        normalized.append({'sku': sku, 'qty': qty, 'color': color, 'length': length, 'note': note})
+        normalized.append({'sku': sku, 'qty': qty, 'color': color, 'size': size, 'length': length, 'note': note})
 
     if not normalized:
         return []
@@ -95,6 +97,8 @@ def _build_cart_snapshot(client_items):
             row['is_active'] = False
         if it['color']:
             row['color'] = it['color']
+        if it['size']:
+            row['size'] = it['size']
         if it['length']:
             row['length'] = it['length']
         if it['note']:
@@ -120,6 +124,7 @@ def _send_telegram(lead_id):
                 f"• {e(str(it.get('name', '?')))} (арт. {e(str(it.get('sku', '?')))})"
                 f" × {int(it.get('qty', 1))} {e(str(it.get('unit', '')))}"
                 + (f"\n   🎨 {e(str(it.get('color')))}" if it.get('color') else '')
+                + (f"\n   📐 свой размер: {e(str(it.get('size')))}" if it.get('size') else '')
                 + (f"\n   📏 своя длина: {e(str(it.get('length')))}" if it.get('length') else '')
                 + (f"\n   💬 {e(str(it.get('note')))}" if it.get('note') else '')
                 for it in lead.cart_snapshot

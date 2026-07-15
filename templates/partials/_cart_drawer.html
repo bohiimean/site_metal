@@ -89,10 +89,11 @@
                        x-text="item.name"></p>
                     <p class="text-[11px] text-muted mb-1"
                        x-text="'Арт. ' + item.sku + (item.unit ? ' · ' + item.unit : '')"></p>
-                    <p class="text-[11px] text-muted mb-2.5" x-show="item.color || item.length || item.note"
+                    <p class="text-[11px] text-muted mb-2.5" x-show="item.color || item.size || item.length || item.note"
                        x-text="[
-                         item.color  ? 'Цвет: ' + item.color   : null,
-                         item.length ? 'Длина: ' + item.length : null,
+                         item.color  ? 'Цвет: ' + item.color     : null,
+                         item.size   ? 'Размер: ' + item.size    : null,
+                         item.length ? 'Длина: ' + item.length   : null,
                          item.note || null,
                        ].filter(Boolean).join(' · ')"></p>
 

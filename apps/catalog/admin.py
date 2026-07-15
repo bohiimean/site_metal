@@ -189,6 +189,7 @@ class ProductAdmin(ModelAdmin):
             unit     = row.get('unit', 'm')
             in_stock = row.get('in_stock', 'in_stock')
             custom_length = bool(row.get('custom_length'))
+            custom_size   = bool(row.get('custom_size'))
             sku_prefix = (row.get('sku_prefix') or '').strip().upper()
 
             height_mm = None
@@ -197,6 +198,16 @@ class ProductAdmin(ModelAdmin):
                     height_mm = Decimal(str(row['height_mm']))
                 except (ValueError, InvalidOperation):
                     pass
+
+            # Sizes (свободные строки: "6×6", "10×10", …)
+            raw_sizes = row.get('sizes') or []
+            sizes = []
+            for sv in raw_sizes:
+                sv = str(sv).strip()[:50]
+                if sv and sv not in sizes:
+                    sizes.append(sv)
+            if not sizes:
+                sizes = ['']
 
             # Lengths
             raw_lengths = row.get('lengths') or []
@@ -209,59 +220,64 @@ class ProductAdmin(ModelAdmin):
             if not lengths:
                 lengths = [None]
 
-            # Generate: марки × обработки × длины
+            # Generate: марки × обработки × размеры × длины
             for steel_grade in steel_grades:
                 for finish in finishes:
-                    for length_m in lengths:
-                        sku = self._build_sku(
-                            product, material, steel_grade, finish, length_m,
-                            sku_prefix, used_skus,
-                        )
-                        used_skus.add(sku)
+                    for size in sizes:
+                        for length_m in lengths:
+                            sku = self._build_sku(
+                                product, material, steel_grade, finish, size, length_m,
+                                sku_prefix, used_skus,
+                            )
+                            used_skus.add(sku)
 
-                        if ProductVariant.objects.filter(sku=sku).exists():
-                            skipped += 1
-                            continue
+                            if ProductVariant.objects.filter(sku=sku).exists():
+                                skipped += 1
+                                continue
 
-                        # Комбинация уже существует под другим SKU — не дублируем
-                        if ProductVariant.objects.filter(
-                            product=product,
-                            material=material,
-                            steel_grade=steel_grade,
-                            finish=finish,
-                            length_m=length_m,
-                            height_mm=height_mm,
-                        ).exists():
-                            skipped += 1
-                            continue
-
-                        try:
-                            v = ProductVariant(
+                            # Комбинация уже существует под другим SKU — не дублируем
+                            if ProductVariant.objects.filter(
                                 product=product,
-                                sku=sku,
                                 material=material,
                                 steel_grade=steel_grade,
                                 finish=finish,
-                                unit=unit,
-                                in_stock=in_stock,
+                                size=size,
                                 length_m=length_m,
                                 height_mm=height_mm,
-                                allow_custom_length=custom_length,
-                            )
-                            v.full_clean()
-                            v.save()
-                            created += 1
-                            parts = [
-                                steel_grade.name if steel_grade else None,
-                                finish.name if finish else None,
-                                f'{length_m} м' if length_m else None,
-                            ]
-                            created_list.append(
-                                f'{sku} ({", ".join(p for p in parts if p) or "—"})'
-                            )
-                        except Exception as e:
-                            errors.append(f'{label} [{sku}]: {e}')
-                            skipped += 1
+                            ).exists():
+                                skipped += 1
+                                continue
+
+                            try:
+                                v = ProductVariant(
+                                    product=product,
+                                    sku=sku,
+                                    material=material,
+                                    steel_grade=steel_grade,
+                                    finish=finish,
+                                    unit=unit,
+                                    in_stock=in_stock,
+                                    size=size,
+                                    length_m=length_m,
+                                    height_mm=height_mm,
+                                    allow_custom_size=custom_size,
+                                    allow_custom_length=custom_length,
+                                )
+                                v.full_clean()
+                                v.save()
+                                created += 1
+                                parts = [
+                                    steel_grade.name if steel_grade else None,
+                                    finish.name if finish else None,
+                                    size or None,
+                                    f'{length_m} м' if length_m else None,
+                                ]
+                                created_list.append(
+                                    f'{sku} ({", ".join(p for p in parts if p) or "—"})'
+                                )
+                            except Exception as e:
+                                errors.append(f'{label} [{sku}]: {e}')
+                                skipped += 1
 
         return {
             'created': created,
@@ -270,20 +286,29 @@ class ProductAdmin(ModelAdmin):
             'created_list': created_list,
         }
 
-    def _build_sku(self, product, material, steel_grade, finish, length_m, prefix, used_skus):
+    def _build_sku(self, product, material, steel_grade, finish, size, length_m, prefix, used_skus):
         if prefix:
             parts = [prefix]
         else:
             parts = [product.slug[:10].upper()]
             parts.append(material.slug[:5].upper() if material.slug else f'M{material.pk}')
 
-        # Марка и обработка входят в SKU и при префиксе:
+        # Марка, обработка и размер входят в SKU и при префиксе:
         # в одной строке их теперь может быть несколько
         if steel_grade:
             grade_part = ''.join(ch for ch in steel_grade.name.upper() if ch.isalnum())[:8]
             parts.append(grade_part or f'G{steel_grade.pk}')
         if finish:
             parts.append(finish.slug[:5].upper() if finish.slug else f'F{finish.pk}')
+
+        if size:
+            # «6×6», «6x6», «6х6» (лат./кир./знак умножения) → «6X6»
+            size_part = ''.join(
+                'X' if ch in 'X×Х' else ch
+                for ch in size.upper() if ch.isalnum() or ch in '×.'
+            )[:12]
+            if size_part:
+                parts.append(size_part)
 
         if length_m:
             l = str(length_m).rstrip('0').rstrip('.')
@@ -328,10 +353,11 @@ class ProductListFilter(admin.SimpleListFilter):
 class ProductVariantAdmin(ModelAdmin):
     list_display = [
         'sku', 'product_link', 'material', 'steel_grade',
-        'finish', 'length_m', 'allow_custom_length', 'unit', 'in_stock', 'is_active',
+        'finish', 'size', 'length_m', 'allow_custom_size', 'allow_custom_length',
+        'unit', 'in_stock', 'is_active',
     ]
     list_display_links = ['sku']
-    list_editable = ['allow_custom_length', 'in_stock', 'is_active']
+    list_editable = ['allow_custom_size', 'allow_custom_length', 'in_stock', 'is_active']
     list_filter = [ProductListFilter, 'material', 'finish', 'in_stock', 'is_active']
     search_fields = ['sku', 'product__name']
     list_per_page = 50
@@ -347,8 +373,8 @@ class ProductVariantAdmin(ModelAdmin):
             'product',
             ('material', 'steel_grade'),
             'finish',
-            ('height_mm', 'length_m'),
-            'allow_custom_length',
+            ('size', 'height_mm', 'length_m'),
+            ('allow_custom_size', 'allow_custom_length'),
             'unit',
             'in_stock',
         ]}),

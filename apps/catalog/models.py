@@ -296,6 +296,15 @@ class ProductVariant(models.Model):
         verbose_name='Обработка',
     )
 
+    size = models.CharField(
+        'Размер', max_length=50, blank=True,
+        help_text='Например: 6×6, 10×10, 40×20',
+    )
+    allow_custom_size = models.BooleanField(
+        'Свой размер', default=False,
+        help_text='На карточке товара появится поле «Свой размер» — '
+                  'клиент укажет нужный размер, он уйдёт в заявку',
+    )
     height_mm = models.DecimalField(
         'Высота, мм', max_digits=8, decimal_places=2,
         null=True, blank=True,

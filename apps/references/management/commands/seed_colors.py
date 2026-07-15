@@ -106,8 +106,8 @@ class Command(BaseCommand):
     # ──────────────────────────────────────────────────────────────────────────
 
     def _clear(self):
-        from apps.references.models import FinishColor, Color, Finish
-        FinishColor.objects.all().delete()
+        from apps.references.models import SteelGradeColor, Color, Finish
+        SteelGradeColor.objects.all().delete()
         Color.objects.all().delete()
         Finish.objects.all().delete()
         self.stdout.write('  Цвета / обработки очищены')
@@ -137,37 +137,27 @@ class Command(BaseCommand):
         return result
 
     def _seed_finishes(self, swatches_colors, ral_colors):
-        from apps.references.models import Finish, FinishColor
+        """Обработки задают только режим селектора (color_ui) —
+        палитра привязана к марке стали (SteelGradeColor, см. _seed_test_variants)."""
+        from apps.references.models import Finish
         self.stdout.write('  Создаю обработки…')
 
-        # 1. swatches — простые кружки
         pol, _ = Finish.objects.update_or_create(
             slug='polirovannaya',
             defaults={'name': 'Полированная', 'color_ui': Finish.COLOR_UI_SWATCHES},
         )
-        for color in swatches_colors.values():
-            FinishColor.objects.get_or_create(finish=pol, color=color)
-
-        # 2. ral_palette — 40 цветов с поиском
         ral, _ = Finish.objects.update_or_create(
             slug='pokraska-ral',
             defaults={'name': 'Покраска RAL', 'color_ui': Finish.COLOR_UI_RAL},
         )
-        for color in ral_colors.values():
-            FinishColor.objects.get_or_create(finish=ral, color=color)
-
-        # 3. custom_request — 5 популярных + свободный запрос
         cust, _ = Finish.objects.update_or_create(
             slug='pod-zakaz',
             defaults={'name': 'Под заказ', 'color_ui': Finish.COLOR_UI_CUSTOM},
         )
-        for name in CUSTOM_POPULAR:
-            if name in swatches_colors:
-                FinishColor.objects.get_or_create(finish=cust, color=swatches_colors[name])
 
-        self.stdout.write(f'    Полированная  → swatches ({pol.finish_colors.count()} цветов)')
-        self.stdout.write(f'    Покраска RAL  → ral_palette ({ral.finish_colors.count()} цветов)')
-        self.stdout.write(f'    Под заказ     → custom_request ({cust.finish_colors.count()} цветов)')
+        self.stdout.write('    Полированная  → swatches')
+        self.stdout.write('    Покраска RAL  → ral_palette')
+        self.stdout.write('    Под заказ     → custom_request')
 
         return pol, ral, cust
 
@@ -208,8 +198,14 @@ class Command(BaseCommand):
 
         self.stdout.write('  Добавляю тестовые варианты к «Профиль Г-образный 30×30×2»…')
 
+        # Палитра марки: все цвета — марке тестового товара
+        from apps.references.models import SteelGradeColor
+        for color in list(swatches_colors.values()) + list(ral_colors.values()):
+            SteelGradeColor.objects.get_or_create(steel_grade=grade, color=color)
+        self.stdout.write(f'    Палитра «{grade}»: {grade.grade_colors.count()} цветов')
+
         # Цвет — не вариант, а параметр заказа: по одному варианту на обработку.
-        # Палитра каждой обработки задаётся через FinishColor (см. выше).
+        # Режим селектора цвета задаёт color_ui обработки, палитра — SteelGradeColor.
         def make(sku, finish):
             if not ProductVariant.objects.filter(sku=sku).exists():
                 ProductVariant.objects.create(

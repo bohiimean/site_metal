@@ -8,7 +8,7 @@ from django.urls import reverse
 from django.utils.html import strip_tags
 from django.utils.text import Truncator
 
-from apps.references.models import FinishColor, Material, SteelGrade, Finish
+from apps.references.models import MaterialColor, SteelGradeColor, Material, SteelGrade, Finish
 from .filters import ProductFilter
 from .models import Category, Product
 
@@ -244,6 +244,8 @@ def _product_detail(request, product):
             'finish_id':        v.finish_id,
             'finish_name':      v.finish.name      if v.finish else None,
             'finish_color_ui':  v.finish.color_ui  if v.finish else 'swatches',
+            'size':             v.size or None,
+            'allow_custom_size': v.allow_custom_size,
             'height_mm':        str(v.height_mm) if v.height_mm else None,
             'length_m':         str(v.length_m)  if v.length_m  else None,
             'allow_custom_length': v.allow_custom_length,
@@ -258,30 +260,47 @@ def _product_detail(request, product):
             'material_id':    v['material_id'],
             'steel_grade_id': v['steel_grade_id'],
             'finish_id':      v['finish_id'],
+            'size':           v['size'],
             'length_m':       v['length_m'],
         }
         for v in variants_data
     ]
 
-    # Палитра: цвета каждой обработки, встречающейся в вариантах (из FinishColor)
-    finish_ids = {v['finish_id'] for v in variants_data if v['finish_id']}
-    finish_colors = {}
-    if finish_ids:
-        fc_qs = (
-            FinishColor.objects
-            .filter(finish_id__in=finish_ids, color__is_active=True)
+    # Палитры: цвета марок (SteelGradeColor) + фолбэк-палитры материалов
+    # (MaterialColor) — для вариантов без марки или марок без своих цветов.
+    # Интерфейс выбора (свотчи/RAL/свой) определяет обработка (finish_color_ui)
+    def _color_dict(c):
+        return {
+            'id':       c.id,
+            'name':     c.name,
+            'hex':      c.hex_code,
+            'ral_code': c.ral_code,
+            'group':    c.color_group,
+        }
+
+    grade_ids = {v['steel_grade_id'] for v in variants_data if v['steel_grade_id']}
+    grade_colors = {}
+    if grade_ids:
+        gc_qs = (
+            SteelGradeColor.objects
+            .filter(steel_grade_id__in=grade_ids, color__is_active=True)
             .select_related('color')
             .order_by('color__color_group', 'color__name')
         )
-        for fc in fc_qs:
-            c = fc.color
-            finish_colors.setdefault(fc.finish_id, []).append({
-                'id':       c.id,
-                'name':     c.name,
-                'hex':      c.hex_code,
-                'ral_code': c.ral_code,
-                'group':    c.color_group,
-            })
+        for gc in gc_qs:
+            grade_colors.setdefault(gc.steel_grade_id, []).append(_color_dict(gc.color))
+
+    material_ids = {v['material_id'] for v in variants_data if v['material_id']}
+    material_colors = {}
+    if material_ids:
+        mc_qs = (
+            MaterialColor.objects
+            .filter(material_id__in=material_ids, color__is_active=True)
+            .select_related('color')
+            .order_by('color__color_group', 'color__name')
+        )
+        for mc in mc_qs:
+            material_colors.setdefault(mc.material_id, []).append(_color_dict(mc.color))
 
     # Карта «обработка/цвет → фото». Ключи (клиент перебирает от точного
     # к общему: обработка+цвет → обработка+группа → цвет → группа → обработка):
@@ -326,7 +345,8 @@ def _product_detail(request, product):
         'images_json':        images_data,
         'variants_json':      variants_data,
         'combinations_json':  combinations,
-        'finish_colors_json': finish_colors,
+        'grade_colors_json':  grade_colors,
+        'material_colors_json': material_colors,
         'color_images_json':  color_images,
         'schema_org':         _schema_org(request, product, images),
     })

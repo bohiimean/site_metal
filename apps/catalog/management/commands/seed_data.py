@@ -45,7 +45,7 @@ class Command(BaseCommand):
 
     def _clear(self):
         from apps.catalog.models import Category, Product, ProductImage, ProductVariant
-        from apps.references.models import Material, SteelGrade, Finish, Color, FinishColor
+        from apps.references.models import Material, SteelGrade, Finish, Color, SteelGradeColor
         from apps.home.models import HomeBlock, HomeBlockItem
         from apps.pages.models import Page
 
@@ -55,7 +55,7 @@ class Command(BaseCommand):
         ProductImage.objects.all().delete()
         Product.objects.all().delete()
         Category.objects.all().delete()
-        FinishColor.objects.all().delete()
+        SteelGradeColor.objects.all().delete()
         Color.objects.all().delete()
         Finish.objects.all().delete()
         SteelGrade.objects.all().delete()
@@ -67,7 +67,7 @@ class Command(BaseCommand):
     # ──────────────────────────────────────────
 
     def _seed_references(self):
-        from apps.references.models import Material, SteelGrade, Finish, Color, FinishColor
+        from apps.references.models import Material, SteelGrade, Finish, Color, SteelGradeColor
 
         self.stdout.write('  Справочники…')
 
@@ -115,14 +115,15 @@ class Command(BaseCommand):
             c, _ = Color.objects.get_or_create(name=name, defaults={'hex_code': hex_code})
             colors[name] = c
 
-        # Привязки: обработка → доступные цвета
-        for finish, color_names in [
-            (pol, ['Натуральный', 'Золото', 'Шампань', 'Розовое золото']),
-            (sat, ['Натуральный', 'Шампань', 'Чёрный никель']),
-            (dek, ['Золото', 'Чёрный никель', 'Медь', 'Розовое золото']),
+        # Привязки: марка стали → доступные цвета (палитра марки;
+        # режим селектора на карточке задаёт color_ui обработки)
+        for grade_name, color_names in [
+            ('AISI 304', ['Натуральный', 'Золото', 'Шампань', 'Чёрный никель', 'Розовое золото']),
+            ('12Х18Н10Т', ['Натуральный', 'Шампань', 'Чёрный никель']),
+            ('ЛС59-1',   ['Натуральный', 'Золото', 'Медь']),
         ]:
             for cname in color_names:
-                FinishColor.objects.get_or_create(finish=finish, color=colors[cname])
+                SteelGradeColor.objects.get_or_create(steel_grade=grades[grade_name], color=colors[cname])
 
         return {
             'stal': stal, 'nerzh': nerzh, 'latun': latun, 'alyum': alyum,

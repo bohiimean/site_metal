@@ -115,9 +115,10 @@
     <h2 style="margin: 0; padding: 9px 14px; font-size: 13px;">⚡ Генератор вариантов</h2>
     <div style="padding: 14px 16px;">
       <p class="gen-hint">
-        Вариант = материал × марка × обработка × размеры.
-        Цвет вариантом не является — палитра берётся из «Цветов обработки»,
-        фото под цвет задаются в блоке «Фото по цветам» выше.
+        Вариант = материал × марка × обработка × размеры × длины.
+        Цвет вариантом не является — палитра задаётся в карточке марки стали
+        («Доступные цвета»; для вариантов без марки — в карточке материала),
+        фото под цвет — в блоке изображений выше.
       </p>
       <div x-data="variantGenerator('{% url "admin:catalog_product_generate_variants" original.pk %}')"
            x-init="init()">
@@ -188,6 +189,38 @@
                     <span>{{ f.name }}</span>
                   </label>
                 {% endfor %}
+              </div>
+            </div>
+
+            {# Размеры #}
+            <div class="gen-field" style="margin-bottom:14px;">
+              <label>
+                Размеры
+                <span style="font-weight:400;text-transform:none;">
+                  (например 6×6, 10×10 — на каждый будет свой вариант; пусто — без размера)
+                </span>
+              </label>
+              <div class="gen-lengths">
+                <template x-for="(sz, si) in row.sizes" :key="si">
+                  <div style="display:flex;align-items:center;gap:4px;">
+                    <input type="text"
+                           class="gen-length-input" style="width:90px !important;"
+                           placeholder="6×6"
+                           :value="sz"
+                           @input="row.sizes[si] = $event.target.value">
+                    <button type="button" class="button gen-btn-sm"
+                            style="background:#888;border-color:#888;"
+                            @click="removeSize(row, si)">✕</button>
+                  </div>
+                </template>
+                <button type="button" class="button gen-btn-sm"
+                        @click="addSize(row)">+ Размер</button>
+                <label class="gen-check-item" style="margin-left:12px;">
+                  <input type="checkbox" x-model="row.custom_size">
+                  <span>Свой размер
+                    <span style="font-weight:400;color:#888;">(на карточке появится поле — клиент укажет свой размер)</span>
+                  </span>
+                </label>
               </div>
             </div>
 
@@ -343,6 +376,7 @@ function variantGenerator(genUrl) {
         material_id: '',
         steel_grade_ids: [],   // выбранные марки (множество)
         finish_ids: [],        // выбранные обработки; 'none' = без обработки
+        sizes: [], custom_size: false,
         lengths: ['3'], custom_length: false,
         unit: 'm',
         in_stock: 'in_stock', height_mm: '', sku_prefix: '',
@@ -355,6 +389,8 @@ function variantGenerator(genUrl) {
     removeRow(i)         { this.rows.splice(i, 1); },
     addLength(row)       { row.lengths.push(''); },
     removeLength(row, i) { row.lengths.splice(i, 1); },
+    addSize(row)         { row.sizes.push(''); },
+    removeSize(row, i)   { row.sizes.splice(i, 1); },
 
     toggleIn(arr, val) {
       const i = arr.indexOf(val);

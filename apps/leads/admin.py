@@ -72,6 +72,10 @@ class LeadAdmin(ModelAdmin):
                 extras.append(format_html(
                     '<span style="color:#555">🎨 {}</span>', item['color'],
                 ))
+            if item.get('size'):
+                extras.append(format_html(
+                    '<span style="color:#555">📐 свой размер: {}</span>', item['size'],
+                ))
             if item.get('length'):
                 extras.append(format_html(
                     '<span style="color:#555">📏 своя длина: {}</span>', item['length'],
