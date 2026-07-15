@@ -55,19 +55,14 @@
             hx-trigger="change"
             hx-push-url="true">
 
-        {% include "catalog/_filter_facet.html" with title="Материал"    name="material"    options=materials    selected=selected_materials %}
-        {% include "catalog/_filter_facet.html" with title="Марка стали" name="steel_grade" options=steel_grades selected=selected_steel_grades %}
-        {% include "catalog/_filter_facet.html" with title="Обработка"   name="finish"      options=finishes     selected=selected_finishes %}
-
-        <!-- Наличие -->
-        <div class="border-b border-border pb-4 mb-4">
-          <label class="flex items-center gap-2 text-[12px] text-primary cursor-pointer hover:text-accent">
-            <input type="checkbox" name="in_stock" value="true"
-                   {% if request.GET.in_stock == 'true' %}checked{% endif %}
-                   class="accent-[var(--color-accent)] w-3.5 h-3.5 rounded-sm">
-            <span class="text-[11px] font-semibold uppercase tracking-widest text-muted">Только в наличии</span>
-          </label>
-        </div>
+        {# Состав и порядок фасетов настраивается менеджером в категории («Фильтры раздела») #}
+        {% for facet in facets %}
+          {% if facet.is_bool %}
+            {% include "catalog/_filter_stock.html" with title=facet.title %}
+          {% else %}
+            {% include "catalog/_filter_facet.html" with title=facet.title name=facet.name options=facet.options selected=facet.selected %}
+          {% endif %}
+        {% endfor %}
 
         <a href="{{ request.path }}" class="block text-center text-[11px] text-muted hover:text-accent transition-colors">
           Сбросить фильтры

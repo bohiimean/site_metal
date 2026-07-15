@@ -20,6 +20,14 @@ class ProductFilter(django_filters.FilterSet):
         field_name='variants__finish',
         label='Обработка',
     )
+    size = django_filters.AllValuesMultipleFilter(
+        field_name='variants__size',
+        label='Размер',
+    )
+    length = django_filters.AllValuesMultipleFilter(
+        field_name='variants__length_m',
+        label='Длина',
+    )
     in_stock = django_filters.BooleanFilter(
         method='filter_in_stock',
         label='Только в наличии',

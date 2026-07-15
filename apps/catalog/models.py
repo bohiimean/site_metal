@@ -50,6 +50,46 @@ class Category(MP_Node):
             })
 
 
+class CategoryFacet(models.Model):
+    """Настройка фильтров раздела каталога (управляется менеджером).
+
+    Наследование: у категории нет ни одной строки → берётся конфиг ближайшего
+    предка; нет ни у кого → стандартный набор (см. DEFAULT_FACET_KEYS в views).
+    Значения внутри фасета считаются автоматически из активных вариантов
+    товаров раздела; фасет без значений скрывается, даже если включён.
+    """
+    FACET_CHOICES = [
+        ('material',    'Материал'),
+        ('steel_grade', 'Марка стали'),
+        ('finish',      'Обработка'),
+        ('size',        'Размер'),
+        ('length',      'Длина'),
+        ('in_stock',    'Только в наличии'),
+    ]
+
+    category = models.ForeignKey(
+        Category, on_delete=models.CASCADE,
+        related_name='facets',
+        verbose_name='Категория',
+    )
+    facet = models.CharField('Фильтр', max_length=20, choices=FACET_CHOICES)
+    title = models.CharField(
+        'Свой заголовок', max_length=100, blank=True,
+        help_text='Пусто — стандартный («Марка стали» и т.п.)',
+    )
+    sort_order = models.PositiveIntegerField('Порядок', default=0)
+    is_active = models.BooleanField('Активен', default=True)
+
+    class Meta:
+        verbose_name = 'Фильтр раздела'
+        verbose_name_plural = 'Фильтры раздела'
+        ordering = ['sort_order']
+        unique_together = [('category', 'facet')]
+
+    def __str__(self):
+        return f'{self.category} — {self.get_facet_display()}'
+
+
 class ProductQuerySet(models.QuerySet):
     def for_cards(self):
         """QuerySet для сетки карточек: с первым фото и первым вариантом."""

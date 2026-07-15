@@ -10,7 +10,7 @@ from django.utils.text import Truncator
 
 from apps.references.models import MaterialColor, SteelGradeColor, Material, SteelGrade, Finish
 from .filters import ProductFilter
-from .models import Category, Product
+from .models import Category, CategoryFacet, Product, ProductVariant
 
 PAGE_SIZE = 9
 SORT_MAP = {
@@ -18,24 +18,75 @@ SORT_MAP = {
     'new':  '-created_at',
 }
 
+# Набор фасетов по умолчанию — для категорий без своей настройки
+# (CategoryFacet) и для страниц без категории (весь каталог, поиск)
+DEFAULT_FACET_KEYS = ['material', 'steel_grade', 'finish', 'in_stock']
+
 
 def _product_qs():
     """Базовый QuerySet товаров с нужными join-ами."""
     return Product.objects.for_cards()
 
 
-def _facet_ctx(request):
-    """Опции фасетов сайдбара. Значения — из справочников (управляются в админке);
-    показываем только те, что реально встречаются в активных вариантах."""
-    used = {'productvariant__is_active': True, 'is_active': True}
-    return {
-        'materials':             Material.objects.filter(**used).distinct(),
-        'steel_grades':          SteelGrade.objects.filter(**used).distinct(),
-        'finishes':              Finish.objects.filter(**used).distinct(),
-        'selected_materials':    request.GET.getlist('material'),
-        'selected_steel_grades': request.GET.getlist('steel_grade'),
-        'selected_finishes':     request.GET.getlist('finish'),
-    }
+def _facet_config(category):
+    """Состав фасетов: (ключ, свой заголовок). Наследование вверх по дереву:
+    первая категория (от текущей к корню), у которой есть хоть одна строка
+    CategoryFacet, задаёт конфиг; показываются только её активные фасеты."""
+    if category:
+        for cat in [category] + list(reversed(category.get_ancestors())):
+            rows = list(cat.facets.all())
+            if rows:
+                return [(r.facet, r.title) for r in rows if r.is_active]
+    return [(k, '') for k in DEFAULT_FACET_KEYS]
+
+
+def _trim_length(value):
+    s = str(value).rstrip('0').rstrip('.')
+    return f'{s} м'
+
+
+def _facet_ctx(request, category=None):
+    """Фасеты сайдбара: состав и порядок — из настройки раздела (CategoryFacet),
+    значения — автоматически из активных вариантов товаров раздела.
+    Фасет без значений скрывается."""
+    variant_qs = ProductVariant.objects.filter(is_active=True, product__is_active=True)
+    if category:
+        cat_ids = [c.pk for c in category.get_descendants(include_self=True)]
+        variant_qs = variant_qs.filter(product__category_id__in=cat_ids)
+
+    titles = dict(CategoryFacet.FACET_CHOICES)
+    facets = []
+    for key, custom_title in _facet_config(category):
+        options = []
+        if key == 'material':
+            options = Material.objects.filter(
+                is_active=True, pk__in=variant_qs.values('material_id'))
+        elif key == 'steel_grade':
+            options = SteelGrade.objects.filter(
+                is_active=True, pk__in=variant_qs.values('steel_grade_id'))
+        elif key == 'finish':
+            options = Finish.objects.filter(
+                is_active=True, pk__in=variant_qs.values('finish_id'))
+        elif key == 'size':
+            values = variant_qs.exclude(size='').values_list('size', flat=True).distinct()
+            options = [
+                {'pk': s, 'name': s}
+                for s in sorted(values, key=lambda s: (len(s), s))
+            ]
+        elif key == 'length':
+            values = variant_qs.exclude(length_m=None).values_list('length_m', flat=True).distinct()
+            options = [{'pk': str(l), 'name': _trim_length(l)} for l in sorted(values)]
+
+        if key != 'in_stock' and not options:
+            continue  # в разделе нет значений — фасет не показываем
+        facets.append({
+            'name':     key,
+            'title':    custom_title or titles[key],
+            'options':  options,
+            'selected': request.GET.getlist(key),
+            'is_bool':  key == 'in_stock',
+        })
+    return {'facets': facets}
 
 
 def search_view(request):
@@ -142,7 +193,7 @@ def _render_catalog(request, category):
         'category':          category,
         'sort':              sort,
         'categories':        Category.objects.filter(is_active=True, depth=1),
-        **_facet_ctx(request),
+        **_facet_ctx(request, category),
     }
 
     if is_htmx and page_num > 1:

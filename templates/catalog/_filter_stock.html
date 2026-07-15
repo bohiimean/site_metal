@@ -1,0 +1,11 @@
+{% comment %}
+Фасет-чекбокс «Только в наличии». Параметры: title
+{% endcomment %}
+<div class="border-b border-border pb-4 mb-4">
+  <label class="flex items-center gap-2 text-[12px] text-primary cursor-pointer hover:text-accent">
+    <input type="checkbox" name="in_stock" value="true"
+           {% if request.GET.in_stock == 'true' %}checked{% endif %}
+           class="accent-[var(--color-accent)] w-3.5 h-3.5 rounded-sm">
+    <span class="text-[11px] font-semibold uppercase tracking-widest text-muted">{{ title }}</span>
+  </label>
+</div>

@@ -11,7 +11,7 @@ from unfold.widgets import SELECT_CLASSES
 from treebeard.forms import movenodeform_factory
 
 from apps.references.models import SteelGrade, Material, Finish
-from .models import Category, Product, ProductImage, ProductVariant
+from .models import Category, CategoryFacet, Product, ProductImage, ProductVariant
 
 
 # Treebeard TreeAdmin несовместим с unfold (битая разметка таблицы, drag&drop
@@ -31,9 +31,22 @@ class CategoryAdminForm(_CategoryBaseForm):
                 self.fields[name].widget.attrs['class'] = ' '.join(SELECT_CLASSES)
 
 
+class CategoryFacetInline(TabularInline):
+    model = CategoryFacet
+    extra = 0
+    fields = ['facet', 'title', 'sort_order', 'is_active']
+    ordering_field = 'sort_order'
+    verbose_name_plural = (
+        'Фильтры раздела (нет ни одной строки — наследуются от родительской '
+        'категории или показывается стандартный набор; фасет без значений '
+        'в разделе скрывается сам)'
+    )
+
+
 @admin.register(Category)
 class CategoryAdmin(ModelAdmin):
     form = CategoryAdminForm
+    inlines = [CategoryFacetInline]
     list_display = ['tree_name', 'slug', 'image_preview', 'is_active']
     list_editable = ['is_active']
     prepopulated_fields = {'slug': ('name',)}
