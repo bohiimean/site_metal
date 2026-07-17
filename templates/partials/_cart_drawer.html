@@ -88,12 +88,16 @@
                     <p class="text-[12.5px] font-semibold text-primary leading-snug mb-0.5 line-clamp-2"
                        x-text="item.name"></p>
                     <p class="text-[11px] text-muted mb-1"
-                       x-text="'Арт. ' + item.sku + (item.unit ? ' · ' + item.unit : '')"></p>
-                    <p class="text-[11px] text-muted mb-2.5" x-show="item.color || item.size || item.length || item.note"
+                       x-show="item.material || item.steel_grade || item.finish"
+                       x-text="[item.material, item.steel_grade, item.finish]
+                         .filter(Boolean).join(' / ')"></p>
+                    <p class="text-[11px] text-muted mb-2.5"
+                       x-show="item.color || item.size || item.length || item.height || item.note"
                        x-text="[
                          item.color  ? 'Цвет: ' + item.color     : null,
                          item.size   ? 'Размер: ' + item.size    : null,
                          item.length ? 'Длина: ' + item.length   : null,
+                         item.height ? 'Высота: ' + item.height  : null,
                          item.note || null,
                        ].filter(Boolean).join(' · ')"></p>
 

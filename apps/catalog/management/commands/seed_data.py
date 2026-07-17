@@ -34,7 +34,7 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(
             f'\nГотово: {counts["categories"]} категорий, '
             f'{counts["products"]} товаров, '
-            f'{counts["variants"]} вариантов, '
+            f'{counts["nodes"]} узлов опций, '
             f'{counts["blocks"]} блоков главной, '
             f'{counts["pages"]} страниц'
         ))
@@ -44,18 +44,20 @@ class Command(BaseCommand):
     # ──────────────────────────────────────────
 
     def _clear(self):
-        from apps.catalog.models import Category, Product, ProductImage, ProductVariant
-        from apps.references.models import Material, SteelGrade, Finish, Color, SteelGradeColor
+        from apps.catalog.models import (
+            Category, Product, ProductImage, ProductOptionNode, ProductParamValue,
+        )
+        from apps.references.models import Material, SteelGrade, Finish, Color
         from apps.home.models import HomeBlock, HomeBlockItem
         from apps.pages.models import Page
 
         HomeBlockItem.objects.all().delete()
         HomeBlock.objects.all().delete()
-        ProductVariant.objects.all().delete()
+        ProductOptionNode.objects.all().delete()
+        ProductParamValue.objects.all().delete()
         ProductImage.objects.all().delete()
         Product.objects.all().delete()
         Category.objects.all().delete()
-        SteelGradeColor.objects.all().delete()
         Color.objects.all().delete()
         Finish.objects.all().delete()
         SteelGrade.objects.all().delete()
@@ -67,7 +69,7 @@ class Command(BaseCommand):
     # ──────────────────────────────────────────
 
     def _seed_references(self):
-        from apps.references.models import Material, SteelGrade, Finish, Color, SteelGradeColor
+        from apps.references.models import Material, SteelGrade, Finish, Color
 
         self.stdout.write('  Справочники…')
 
@@ -87,12 +89,10 @@ class Command(BaseCommand):
         for name, mat in [
             ('Ст3',          stal),
             ('Ст20',         stal),
-            ('AISI 430',     stal),
+            ('AISI 430',     nerzh),
             ('12Х18Н10Т',    nerzh),
             ('AISI 304',     nerzh),
             ('AISI 316L',    nerzh),
-            ('ЛС59-1',       latun),
-            ('Л63',          latun),
             ('АД31',         alyum),
         ]:
             g, _ = SteelGrade.objects.get_or_create(name=name, defaults={'material': mat})
@@ -114,16 +114,6 @@ class Command(BaseCommand):
         ]:
             c, _ = Color.objects.get_or_create(name=name, defaults={'hex_code': hex_code})
             colors[name] = c
-
-        # Привязки: марка стали → доступные цвета (палитра марки;
-        # режим селектора на карточке задаёт color_ui обработки)
-        for grade_name, color_names in [
-            ('AISI 304', ['Натуральный', 'Золото', 'Шампань', 'Чёрный никель', 'Розовое золото']),
-            ('12Х18Н10Т', ['Натуральный', 'Шампань', 'Чёрный никель']),
-            ('ЛС59-1',   ['Натуральный', 'Золото', 'Медь']),
-        ]:
-            for cname in color_names:
-                SteelGradeColor.objects.get_or_create(steel_grade=grades[grade_name], color=colors[cname])
 
         return {
             'stal': stal, 'nerzh': nerzh, 'latun': latun, 'alyum': alyum,
@@ -169,19 +159,6 @@ class Command(BaseCommand):
                 seo_title=f'{name} — купить оптом | МЕТАПРОФ',
                 seo_description=f'{name} из нержавеющей стали и латуни. Доставка по Москве, резка в размер.',
             )
-
-        # Легаси-ключи для _seed_products/_seed_home_blocks — демо-товары
-        # раскладываются по новым категориям
-        cats.update({
-            'profil':    cats['napolnye'],
-            'p_obr':     cats['napolnye'],
-            'g_obr':     cats['vnesh_ugly'],
-            't_obr':     cats['porog'],
-            'list_met':  cats['otbojnik'],
-            'nerzh_cat': cats['stupeni'],
-            'latun_cat': cats['plintus'],
-            'krepezh':   cats['shov'],
-        })
         return cats
 
     # ──────────────────────────────────────────
@@ -189,11 +166,10 @@ class Command(BaseCommand):
     # ──────────────────────────────────────────
 
     def _seed_products(self, cats, refs):
-        from apps.catalog.models import Product, ProductVariant
+        from apps.catalog.models import Product, ProductOptionNode, ProductParamValue
 
-        self.stdout.write('  Товары и варианты…')
+        self.stdout.write('  Товары и опции…')
 
-        stal   = refs['stal']
         nerzh  = refs['nerzh']
         latun  = refs['latun']
         alyum  = refs['alyum']
@@ -203,270 +179,235 @@ class Command(BaseCommand):
         dek    = refs['dek']
         c      = refs['colors']
 
-        def product(name, slug, cat, code='', desc='', is_new=False):
+        def product(name, slug, cat, code='', desc='', is_new=False,
+                    stock='in_stock', **flags):
             p, _ = Product.objects.get_or_create(
                 slug=slug,
                 defaults=dict(
                     name=name, category=cat, profile_code=code,
-                    description=desc, is_new=is_new,
+                    description=desc, is_new=is_new, in_stock=stock,
                     seo_title=f'{name} — купить оптом | МЕТАПРОФ',
                     seo_description=f'{name}. Широкий выбор, доставка по Москве, резка в размер.',
+                    **flags,
                 ),
             )
             return p
 
-        # price/color в сигнатуре оставлены, чтобы не переписывать все вызовы:
-        # цена ушла из модели (её называет менеджер), цвет — параметр заказа,
-        # а не вариант. Одинаковые комбинации (бывшие цветовые варианты)
-        # схлопываются проверкой на дубль.
-        def variant(prod, sku, mat, price=None, unit='m', length=None, height=None,
-                    grade=None, finish=None, color=None, stock='in_stock'):
-            if ProductVariant.objects.filter(sku=sku).exists():
+        def tree(prod, spec):
+            """Строит дерево опций товара.
+
+            spec: [(material, [(grade|None, [(finish, [colors])])])]
+            grade=None — обработки висят прямо под материалом.
+            """
+            if prod.option_nodes.exists():
                 return
-            if ProductVariant.objects.filter(
-                product=prod, material=mat, steel_grade=grade,
-                finish=finish, length_m=length, height_mm=height,
-            ).exists():
-                return
-            ProductVariant.objects.create(
-                product=prod, sku=sku, material=mat,
-                steel_grade=grade, finish=finish,
-                unit=unit,
-                length_m=length, height_mm=height,
-                in_stock=stock,
-            )
+            for m_order, (mat, branches) in enumerate(spec):
+                m_node = ProductOptionNode.objects.create(
+                    product=prod, node_type='material',
+                    material=mat, sort_order=m_order,
+                )
+                for b_order, (grade, finishes) in enumerate(branches):
+                    if grade is not None:
+                        parent = ProductOptionNode.objects.create(
+                            product=prod, parent=m_node,
+                            node_type='steel_grade',
+                            steel_grade=grade, sort_order=b_order,
+                        )
+                    else:
+                        parent = m_node
+                    for f_order, (finish, colors) in enumerate(finishes):
+                        f_node = ProductOptionNode.objects.create(
+                            product=prod, parent=parent,
+                            node_type='finish',
+                            finish=finish, sort_order=f_order,
+                        )
+                        f_node.colors.set(colors)
+
+        def params(prod, size=(), length=(), height=()):
+            for kind, values in (('size', size), ('length', length), ('height', height)):
+                for order, value in enumerate(values):
+                    ProductParamValue.objects.get_or_create(
+                        product=prod, kind=kind, value=value,
+                        defaults={'sort_order': order},
+                    )
+
+        # Обязательный к работе пример из ТЗ: у 304 и 430 одна и та же
+        # обработка — разные узлы с разными наборами цветов
+        full_palette   = [c['Натуральный'], c['Золото'], c['Шампань'],
+                          c['Чёрный никель'], c['Розовое золото'], c['Медь']]
+        rich_palette   = [c['Натуральный'], c['Золото'], c['Шампань'], c['Чёрный никель']]
+        short_palette  = [c['Натуральный'], c['Золото']]
 
         all_products = []
 
-        # ── П-образный профиль ─────────────────
+        # ── Профиль для напольных покрытий ─────
         p1 = product('Профиль П-образный 40×20×2 мм', 'profil-p-40x20x2',
-                     cats['p_obr'], 'П 40×20×2',
+                     cats['napolnye'], 'П 40×20×2',
                      'П-образный профиль применяется при монтаже лёгких конструкций, рам и каркасов. '
-                     'Высокая точность геометрии, равномерная толщина стенки.')
-        variant(p1, 'P-40-ST3-3M',  stal, 380, length=3, grade=g['Ст3'])
-        variant(p1, 'P-40-ST3-6M',  stal, 680, length=6, grade=g['Ст3'])
-        variant(p1, 'P-40-430-6M',  stal, 820, length=6, grade=g['AISI 430'])
+                     'Высокая точность геометрии, равномерная толщина стенки.',
+                     allow_custom_length=True)
+        tree(p1, [
+            (nerzh, [
+                (g['AISI 304'], [(pol, full_palette), (sat, rich_palette)]),
+                (g['AISI 316L'], [(pol, short_palette)]),
+            ]),
+            (latun, [(None, [(pol, [c['Натуральный'], c['Медь']])])]),
+        ])
+        params(p1, size=['20×20', '40×20', '60×30'], length=['2.7', '3'])
         all_products.append(p1)
 
-        p2 = product('Профиль П-образный 60×30×2 мм', 'profil-p-60x30x2',
-                     cats['p_obr'], 'П 60×30×2',
-                     'Усиленный П-профиль для несущих конструкций. Материал — сталь Ст3 и нержавейка AISI 430.',
-                     is_new=True)
-        variant(p2, 'P-60-ST3-6M',  stal, 960,  length=6, grade=g['Ст3'])
-        variant(p2, 'P-60-430-6M',  stal, 1150, length=6, grade=g['AISI 430'])
-        variant(p2, 'P-60-304-6M',  nerzh, 2100, length=6, grade=g['AISI 304'])
+        p2 = product('Профиль Т-образный 25×12×1,5 мм', 'profil-t-25x12',
+                     cats['napolnye'], 'Т 25×12×1,5',
+                     'Т-профиль используется для декоративного разделения поверхностей, '
+                     'окантовки плитки, облицовки колонн.',
+                     is_new=True, allow_custom_size=True, allow_custom_length=True)
+        tree(p2, [
+            (nerzh, [
+                (g['AISI 304'], [(pol, rich_palette), (sat, short_palette), (dek, full_palette)]),
+                (g['12Х18Н10Т'], [(sat, [c['Натуральный']])]),
+            ]),
+        ])
+        params(p2, size=['13×13', '25×12'], length=['2.7', '3'])
         all_products.append(p2)
 
-        p3 = product('Профиль П-образный 80×40×3 мм', 'profil-p-80x40x3',
-                     cats['p_obr'], 'П 80×40×3',
-                     'Профиль повышенной жёсткости. Применяется в промышленных конструкциях.')
-        variant(p3, 'P-80-ST3-6M',  stal, 1380, length=6, grade=g['Ст3'])
-        variant(p3, 'P-80-ST20-6M', stal, 1480, length=6, grade=g['Ст20'], stock='on_order')
-        all_products.append(p3)
+        # ── Плинтус ────────────────────────────
+        pl1 = product('Плинтус скрытого монтажа 60 мм', 'plintus-skrytogo-montazha-60',
+                      cats['plintus'], 'ПЛ-С 60',
+                      'Алюминиевый плинтус скрытого монтажа под шпаклёвку. '
+                      'Создаёт эффект парящей стены.',
+                      allow_custom_height=True)
+        tree(pl1, [
+            (alyum, [
+                (g['АД31'], [(pol, [c['Натуральный'], c['Чёрный никель']]),
+                             (sat, [c['Натуральный']])]),
+            ]),
+        ])
+        params(pl1, length=['2.5', '3'], height=['40', '60', '80'])
+        all_products.append(pl1)
 
-        p4 = product('Профиль П-образный 100×50×3 мм', 'profil-p-100x50x3',
-                     cats['p_obr'], 'П 100×50×3')
-        variant(p4, 'P-100-ST3-6M', stal, 1850, length=6, grade=g['Ст3'])
-        variant(p4, 'P-100-430-6M', stal, 2200, length=6, grade=g['AISI 430'], stock='on_order')
-        all_products.append(p4)
-
-        # ── Г-образный профиль ─────────────────
-        g1 = product('Профиль Г-образный 30×30×2 мм', 'profil-g-30x30x2',
-                     cats['g_obr'], 'Г 30×30×2',
-                     'Угловой профиль для отделки откосов, витрин, мебели. '
-                     'Доступен в стальном и нержавеющем исполнении с декоративной обработкой.')
-        variant(g1, 'G-30-ST3-3M',  stal,  280, length=3, grade=g['Ст3'])
-        variant(g1, 'G-30-430-3M',  stal,  420, length=3, grade=g['AISI 430'])
-        variant(g1, 'G-30-SAT-N',   nerzh, 890, length=3, grade=g['AISI 304'],
-                finish=sat, color=c['Натуральный'])
-        variant(g1, 'G-30-POL-G',   nerzh, 1050, length=3, grade=g['AISI 304'],
-                finish=pol, color=c['Золото'])
-        all_products.append(g1)
-
-        g2 = product('Профиль Г-образный 50×50×3 мм', 'profil-g-50x50x3',
-                     cats['g_obr'], 'Г 50×50×3',
-                     'Крупный угловой профиль для промышленного применения и строительства.')
-        variant(g2, 'G-50-ST3-3M',  stal,  540, length=3, grade=g['Ст3'])
-        variant(g2, 'G-50-ST3-6M',  stal,  980, length=6, grade=g['Ст3'])
-        variant(g2, 'G-50-430-6M',  stal, 1180, length=6, grade=g['AISI 430'], stock='on_order')
-        all_products.append(g2)
-
-        g3 = product('Профиль Г-образный 20×10×1,5 мм', 'profil-g-20x10x1-5',
-                     cats['g_obr'], 'Г 20×10×1,5',
-                     'Малый угловой профиль. Применяется в мебельной промышленности и интерьерной отделке.',
-                     is_new=True)
-        variant(g3, 'G-20-SAT-N',   nerzh, 540, length=3, grade=g['AISI 304'],
-                finish=sat, color=c['Натуральный'])
-        variant(g3, 'G-20-DEK-BLK', nerzh, 620, length=3, grade=g['AISI 304'],
-                finish=dek, color=c['Чёрный никель'])
-        variant(g3, 'G-20-POL-GLD', nerzh, 680, length=3, grade=g['AISI 304'],
-                finish=pol, color=c['Золото'])
-        all_products.append(g3)
-
-        # ── Т-образный профиль ─────────────────
-        t1 = product('Профиль Т-образный 40×20×2 мм', 'profil-t-40x20x2',
-                     cats['t_obr'], 'Т 40×20×2',
-                     'Т-профиль используется для декоративного разделения поверхностей, '
-                     'окантовки плитки, облицовки колонн.')
-        variant(t1, 'T-40-SAT-N',   nerzh, 760, length=3, grade=g['AISI 304'],
-                finish=sat, color=c['Натуральный'])
-        variant(t1, 'T-40-POL-SH',  nerzh, 840, length=3, grade=g['AISI 304'],
-                finish=pol, color=c['Шампань'])
-        variant(t1, 'T-40-DEK-G',   nerzh, 920, length=3, grade=g['AISI 304'],
-                finish=dek, color=c['Золото'])
-        all_products.append(t1)
-
-        t2 = product('Профиль Т-образный 25×12×1,5 мм', 'profil-t-25x12',
-                     cats['t_obr'], 'Т 25×12×1,5')
-        variant(t2, 'T-25-SAT-N',   nerzh, 490, length=3, grade=g['AISI 304'],
-                finish=sat, color=c['Натуральный'])
-        variant(t2, 'T-25-DEK-BK',  nerzh, 560, length=3, grade=g['AISI 304'],
-                finish=dek, color=c['Чёрный никель'])
-        all_products.append(t2)
-
-        # ── Листовой металл ────────────────────
-        l1 = product('Лист стальной горячекатаный 1500×3000 мм, δ=2 мм', 'list-st-gk-2mm',
-                     cats['list_met'], 'Лист г/к 2,0',
-                     'Горячекатаный стальной лист. Применяется в строительстве, машиностроении, '
-                     'производстве металлоконструкций.')
-        variant(l1, 'LS-GK-2-ST3',  stal, 4200, unit='sheet', grade=g['Ст3'])
-        variant(l1, 'LS-GK-2-ST20', stal, 4600, unit='sheet', grade=g['Ст20'], stock='on_order')
-        all_products.append(l1)
-
-        l2 = product('Лист стальной холоднокатаный 1250×2500 мм, δ=1 мм', 'list-st-xk-1mm',
-                     cats['list_met'], 'Лист х/к 1,0')
-        variant(l2, 'LS-XK-1-ST3',  stal, 3100, unit='sheet', grade=g['Ст3'])
-        all_products.append(l2)
-
-        l3 = product('Лист нержавеющий зеркальный 1000×2000 мм, δ=1,5 мм', 'list-nerzh-zerkalo-1-5mm',
-                     cats['list_met'], 'Лист н/ж зеркало 1,5',
-                     'Зеркальный нержавеющий лист AISI 304. Используется в дизайне интерьеров, '
-                     'облицовке лифтов, декоративных перегородках.',
-                     is_new=True)
-        variant(l3, 'LS-NZH-MIR-304-15', nerzh, 12500, unit='sheet', grade=g['AISI 304'],
-                finish=pol, color=c['Натуральный'])
-        all_products.append(l3)
-
-        l4 = product('Лист нержавеющий сатинированный 1000×2000 мм, δ=1,5 мм', 'list-nerzh-satin-1-5mm',
-                     cats['list_met'], 'Лист н/ж сатин 1,5',
-                     'Сатинированный нержавеющий лист AISI 304. Популярен в ресторанной отделке, '
-                     'кухонных фасадах, торговом оборудовании.')
-        variant(l4, 'LS-NZH-SAT-304-15', nerzh, 10800, unit='sheet', grade=g['AISI 304'],
-                finish=sat, color=c['Натуральный'])
-        all_products.append(l4)
-
-        l5 = product('Лист алюминиевый 1500×3000 мм, δ=2 мм', 'list-alyum-2mm',
-                     cats['list_met'], 'Лист Al 2,0',
-                     'Алюминиевый лист сплав АД31. Лёгкий, коррозионностойкий. '
-                     'Применяется в вентиляционных системах и отделке фасадов.')
-        variant(l5, 'LS-AL-2-AD31', alyum, 5800, unit='sheet', grade=g['АД31'])
-        all_products.append(l5)
-
-        # ── Латунные изделия ───────────────────
-        lt1 = product('Труба латунная круглая ø20×1,5 мм', 'truba-latun-20x1-5',
-                      cats['latun_cat'], 'Тр. лат. ø20×1,5',
-                      'Латунная труба ЛС59-1. Применяется в сантехнике, '
-                      'декоративных конструкциях, перилах.',
+        pl2 = product('Плинтус латунный 40 мм', 'plintus-latun-40',
+                      cats['plintus'], 'ПЛ-Л 40',
+                      'Латунный плинтус для интерьеров премиум-класса. '
+                      'Тёплый золотистый оттенок, устойчивость к коррозии.',
                       is_new=True)
-        variant(lt1, 'TR-LAT-20-3M',  latun, 980,  length=3, grade=g['ЛС59-1'])
-        variant(lt1, 'TR-LAT-20-6M',  latun, 1860, length=6, grade=g['ЛС59-1'])
-        all_products.append(lt1)
+        tree(pl2, [
+            (latun, [(None, [(pol, [c['Натуральный'], c['Медь']]),
+                             (sat, [c['Натуральный']])])]),
+        ])
+        params(pl2, length=['2.5', '3'], height=['40', '60'])
+        all_products.append(pl2)
 
-        lt2 = product('Труба латунная квадратная 20×20×1,5 мм', 'truba-latun-kv-20x20',
-                      cats['latun_cat'], 'Тр. лат. □20×20×1,5')
-        variant(lt2, 'TR-LAT-KV20-3M', latun, 1120, length=3, grade=g['ЛС59-1'])
-        all_products.append(lt2)
+        # ── Порог стыковочный ──────────────────
+        pr1 = product('Порог стыковочный плоский 30 мм', 'porog-ploskij-30',
+                      cats['porog'], 'ПС 30',
+                      'Плоский стыковочный порог для соединения напольных покрытий '
+                      'одного уровня.',
+                      allow_custom_length=True)
+        tree(pr1, [
+            (nerzh, [
+                (g['AISI 304'], [(pol, rich_palette), (sat, rich_palette)]),
+                (g['AISI 430'], [(pol, short_palette), (sat, [c['Натуральный']])]),
+            ]),
+        ])
+        params(pr1, size=['20', '30', '40'], length=['0.9', '1.35', '2.7'])
+        all_products.append(pr1)
 
-        lt3 = product('Пруток латунный ø10 мм', 'prutok-latun-10mm',
-                      cats['latun_cat'], 'Прут. лат. ø10',
-                      'Латунный пруток Л63. Применяется в точной механике, '
-                      'изготовлении фурнитуры и декоративных элементов.')
-        variant(lt3, 'PR-LAT-10-1M',  latun, 420, length=1, grade=g['Л63'])
-        variant(lt3, 'PR-LAT-10-3M',  latun, 1180, length=3, grade=g['Л63'])
-        all_products.append(lt3)
+        # ── Профиль для защиты ступеней ────────
+        st1 = product('Профиль для ступеней Г-образный 30×30 мм', 'profil-stupeni-g-30x30',
+                      cats['stupeni'], 'Г 30×30',
+                      'Угловой профиль для защиты кромок ступеней. '
+                      'Противоскользящая функция, защита от сколов.')
+        tree(st1, [
+            (nerzh, [
+                (g['AISI 304'], [(pol, full_palette), (sat, rich_palette), (dek, rich_palette)]),
+            ]),
+            (latun, [(None, [(pol, [c['Натуральный']])])]),
+        ])
+        params(st1, size=['20×20', '30×30', '40×20'], length=['2.7', '3'])
+        all_products.append(st1)
 
-        lt4 = product('Лист латунный декоративный 600×1200 мм, δ=0,8 мм', 'list-latun-dek-0-8mm',
-                      cats['latun_cat'], 'Лист лат. дек. 0,8',
-                      'Декоративный латунный лист с золотистым блеском. '
-                      'Применяется в интерьерном дизайне, изготовлении вывесок, экранов.')
-        variant(lt4, 'LS-LAT-DEK-L63', latun, 3200, unit='sheet', grade=g['Л63'])
-        all_products.append(lt4)
+        # ── Углы ───────────────────────────────
+        u1 = product('Профиль для внешних углов 15×15 мм', 'profil-vneshnie-ugly-15',
+                     cats['vnesh_ugly'], 'УВ 15×15',
+                     'Профиль защищает внешние углы стен от сколов, '
+                     'придаёт отделке законченный вид.',
+                     is_new=True, allow_custom_length=True)
+        tree(u1, [
+            (nerzh, [
+                (g['AISI 304'], [(pol, rich_palette), (sat, short_palette)]),
+                (g['AISI 430'], [(sat, [c['Натуральный']])]),
+            ]),
+        ])
+        params(u1, size=['10×10', '15×15', '20×20'], length=['2.7', '3'])
+        all_products.append(u1)
 
-        # ── Нержавейка ─────────────────────────
-        n1 = product('Труба нержавеющая круглая ø32×1,5 мм', 'truba-nerzh-32x1-5',
-                     cats['nerzh_cat'], 'Тр. н/ж ø32×1,5',
-                     'Труба нержавеющая AISI 304 полированная. Применяется в перилах, '
-                     'поручнях, ограждениях, сантехнических системах.')
-        variant(n1, 'TR-NZH-32-POL-3M', nerzh, 1650, length=3, grade=g['AISI 304'],
-                finish=pol, color=c['Натуральный'])
-        variant(n1, 'TR-NZH-32-SAT-3M', nerzh, 1450, length=3, grade=g['AISI 304'],
-                finish=sat, color=c['Натуральный'])
-        all_products.append(n1)
+        u2 = product('Профиль для внутренних углов 10×10 мм', 'profil-vnutrennie-ugly-10',
+                     cats['vnutr_ugly'], 'УВн 10×10')
+        tree(u2, [
+            (nerzh, [
+                (g['AISI 304'], [(pol, rich_palette)]),
+            ]),
+        ])
+        params(u2, size=['10×10', '13×13'], length=['2.7'])
+        all_products.append(u2)
 
-        n2 = product('Труба нержавеющая квадратная 30×30×1,5 мм', 'truba-nerzh-kv-30x30',
-                     cats['nerzh_cat'], 'Тр. н/ж □30×30×1,5',
-                     'Квадратная нержавеющая труба для перил, декоративных стоек, мебели.')
-        variant(n2, 'TR-NZH-KV30-POL-3M', nerzh, 1820, length=3, grade=g['AISI 304'],
-                finish=pol, color=c['Натуральный'])
-        variant(n2, 'TR-NZH-KV30-BLK-3M', nerzh, 2100, length=3, grade=g['AISI 304'],
-                finish=dek, color=c['Чёрный никель'])
-        variant(n2, 'TR-NZH-KV30-GLD-3M', nerzh, 2300, length=3, grade=g['AISI 304'],
-                finish=dek, color=c['Золото'], stock='on_order')
-        all_products.append(n2)
+        # ── Вставка декоративная ───────────────
+        v1 = product('Вставка декоративная 10 мм', 'vstavka-dekorativnaya-10',
+                     cats['vstavka'], 'ВД 10',
+                     'Молдинг-вставка для декоративного оформления стен и мебельных фасадов.',
+                     allow_custom_size=True)
+        tree(v1, [
+            (nerzh, [
+                (g['AISI 304'], [(pol, full_palette), (dek, full_palette)]),
+            ]),
+            (latun, [(None, [(pol, [c['Натуральный'], c['Медь']])])]),
+        ])
+        params(v1, size=['6', '10', '15', '20'], length=['2.7', '3'])
+        all_products.append(v1)
 
-        n3 = product('Уголок нержавеющий 40×40×2 мм', 'ugolok-nerzh-40x40x2',
-                     cats['nerzh_cat'], 'Уголок н/ж 40×40×2',
-                     'Нержавеющий уголок AISI 304. Применяется для защиты углов '
-                     'в общественных помещениях, на производстве и в медицинских учреждениях.')
-        variant(n3, 'UG-NZH-40-SAT-3M', nerzh, 1240, length=3, grade=g['AISI 304'],
-                finish=sat, color=c['Натуральный'])
-        variant(n3, 'UG-NZH-40-POL-3M', nerzh, 1380, length=3, grade=g['AISI 304'],
-                finish=pol, color=c['Натуральный'])
-        all_products.append(n3)
+        # ── Отбойник ───────────────────────────
+        o1 = product('Отбойник для стен 150 мм', 'otbojnik-150',
+                     cats['otbojnik'], 'ОТБ 150',
+                     'Защитный отбойник для стен в общественных помещениях, '
+                     'больницах, паркингах.',
+                     stock='on_order')
+        tree(o1, [
+            (nerzh, [
+                (g['AISI 304'], [(sat, [c['Натуральный']])]),
+                (g['AISI 430'], [(sat, [c['Натуральный']])]),
+            ]),
+            (alyum, [(g['АД31'], [(sat, [c['Натуральный']])])]),
+        ])
+        params(o1, length=['3'], height=['100', '150', '200'])
+        all_products.append(o1)
 
-        n4 = product('Полоса нержавеющая 40×3 мм', 'polosa-nerzh-40x3',
-                     cats['nerzh_cat'], 'Полоса н/ж 40×3')
-        variant(n4, 'PL-NZH-40-3M',  nerzh, 980,  length=3, grade=g['AISI 304'])
-        variant(n4, 'PL-NZH-40-6M',  nerzh, 1860, length=6, grade=g['AISI 304'], stock='on_order')
-        all_products.append(n4)
-
-        n5 = product('Труба нержавеющая ø16×1 мм', 'truba-nerzh-16x1',
-                     cats['nerzh_cat'], 'Тр. н/ж ø16×1',
-                     'Тонкостенная нержавеющая трубка для мебельного производства, '
-                     'торгового оборудования, декоративных стоек.',
+        # ── Зеркало и стекло ───────────────────
+        z1 = product('Профиль для зеркала П-образный 6 мм', 'profil-zerkalo-p-6',
+                     cats['zerkalo'], 'ПЗ 6',
+                     'Обрамление зеркал и стеклянных полотен. Скрывает кромку, '
+                     'защищает амальгаму.',
                      is_new=True)
-        variant(n5, 'TR-NZH-16-POL-3M', nerzh, 920,  length=3, grade=g['AISI 304'],
-                finish=pol, color=c['Натуральный'])
-        variant(n5, 'TR-NZH-16-RG-3M',  nerzh, 1100, length=3, grade=g['AISI 304'],
-                finish=pol, color=c['Розовое золото'])
-        all_products.append(n5)
+        tree(z1, [
+            (nerzh, [
+                (g['AISI 304'], [(pol, full_palette), (dek, rich_palette)]),
+            ]),
+            (latun, [(None, [(pol, [c['Натуральный']])])]),
+        ])
+        params(z1, size=['6', '8', '10'], length=['2.7', '3'])
+        all_products.append(z1)
 
-        # ── Крепёж ─────────────────────────────
-        k1 = product('Болт М10×50 нержавеющий', 'bolt-m10x50-nerzh',
-                     cats['krepezh'], 'Болт М10×50',
-                     'Болт нержавеющий AISI 316L. Применяется в условиях повышенной влажности '
-                     'и агрессивных сред. Класс прочности А2-70.')
-        variant(k1, 'BLT-M10-50-316', nerzh, 28, unit='piece', grade=g['AISI 316L'])
-        all_products.append(k1)
-
-        k2 = product('Гайка М10 нержавеющая', 'gaika-m10-nerzh',
-                     cats['krepezh'], 'Гайка М10')
-        variant(k2, 'GKA-M10-316', nerzh, 12, unit='piece', grade=g['AISI 316L'])
-        all_products.append(k2)
-
-        k3 = product('Шпилька М8×1000 стальная', 'shpilka-m8x1000',
-                     cats['krepezh'], 'Шпилька М8×1000',
-                     'Стальная шпилька с непрерывной резьбой. Применяется в строительстве '
-                     'и монтаже оборудования.')
-        variant(k3, 'SHP-M8-1000-ST', stal, 95, unit='piece', grade=g['Ст3'])
-        variant(k3, 'SHP-M8-1000-NZH', nerzh, 185, unit='piece', grade=g['AISI 304'], stock='on_order')
-        all_products.append(k3)
-
-        k4 = product('Анкерный болт М12×100 нержавеющий', 'anker-m12x100-nerzh',
-                     cats['krepezh'], 'Анкер М12×100',
-                     is_new=True)
-        variant(k4, 'ANK-M12-100-316', nerzh, 145, unit='piece', grade=g['AISI 316L'])
-        all_products.append(k4)
+        # ── Шов деформационный ─────────────────
+        s1 = product('Шов деформационный 50 мм', 'shov-deformacionnyj-50',
+                     cats['shov'], 'ШД 50',
+                     'Компенсирует температурные расширения стяжки и облицовки.')
+        tree(s1, [
+            (nerzh, [
+                (g['AISI 304'], [(sat, [c['Натуральный']])]),
+            ]),
+            (alyum, [(g['АД31'], [(sat, [c['Натуральный']])])]),
+        ])
+        params(s1, size=['30', '50'], length=['2.5', '3'])
+        all_products.append(s1)
 
         return all_products
 
@@ -475,7 +416,7 @@ class Command(BaseCommand):
     # ──────────────────────────────────────────
 
     def _seed_home_blocks(self, cats, products):
-        from apps.catalog.models import Category
+        from apps.catalog.models import Category, Product
         from apps.home.models import HomeBlock, HomeBlockItem
 
         self.stdout.write('  Блоки главной…')
@@ -492,12 +433,10 @@ class Command(BaseCommand):
             limit=4,
             sort_order=10,
         )
-        # Берём товары из разных категорий
         featured_slugs = [
-            'profil-g-30x30x2', 'list-nerzh-zerkalo-1-5mm',
-            'truba-latun-20x1-5', 'truba-nerzh-32x1-5',
+            'profil-p-40x20x2', 'plintus-latun-40',
+            'profil-stupeni-g-30x30', 'vstavka-dekorativnaya-10',
         ]
-        from apps.catalog.models import Product
         for pos, slug in enumerate(featured_slugs):
             try:
                 p = Product.objects.get(slug=slug)
@@ -669,13 +608,13 @@ class Command(BaseCommand):
     # ──────────────────────────────────────────
 
     def _report(self):
-        from apps.catalog.models import Category, Product, ProductVariant
+        from apps.catalog.models import Category, Product, ProductOptionNode
         from apps.home.models import HomeBlock
         from apps.pages.models import Page
         return {
             'categories': Category.objects.count(),
             'products':   Product.objects.count(),
-            'variants':   ProductVariant.objects.count(),
+            'nodes':      ProductOptionNode.objects.count(),
             'blocks':     HomeBlock.objects.count(),
             'pages':      Page.objects.count(),
         }

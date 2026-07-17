@@ -80,10 +80,12 @@
       });
 
       // ─ Глобальная корзина (localStorage) ─
-      // Позиция = SKU + цвет + свой размер + своя длина (+ note):
-      // один вариант в разных исполнениях — разные строки.
+      // Позиция = товар + все выбранные параметры:
+      // одно изделие в разных исполнениях — разные строки.
       function cartKey(i) {
-        return i.sku + '::' + (i.color || '') + '::' + (i.size || '') + '::' + (i.length || '') + '::' + (i.note || '');
+        return [i.slug, i.material, i.steel_grade, i.finish, i.color,
+                i.size, i.length, i.height, i.note]
+          .map(function(v) { return v || ''; }).join('::');
       }
       Alpine.store('cart', {
         items: JSON.parse(localStorage.getItem('cart') || '[]')
@@ -209,15 +211,19 @@
 
             this.loading = true;
             try {
-              // Клиент отправляет только sku/qty/color/size/length/note — название
-              // и единицу сервер берёт из БД по SKU, чтобы клиент не подсунул мусор.
+              // Клиент отправляет slug/qty и выбранные параметры — название
+              // товара сервер берёт из БД по slug, чтобы клиент не подсунул мусор.
               var items = this.$store.cart.items.map(function(i) {
                 return {
-                  sku: i.sku,
+                  slug: i.slug,
                   qty: i.qty,
+                  material: i.material || null,
+                  steel_grade: i.steel_grade || null,
+                  finish: i.finish || null,
                   color: i.color || null,
                   size: i.size || null,
                   length: i.length || null,
+                  height: i.height || null,
                   note: i.note || null,
                 };
               });

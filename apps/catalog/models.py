@@ -92,7 +92,7 @@ class CategoryFacet(models.Model):
 
 class ProductQuerySet(models.QuerySet):
     def for_cards(self):
-        """QuerySet для сетки карточек: с первым фото и первым вариантом."""
+        """QuerySet для сетки карточек: с первым фото и материалами (подпись)."""
         from django.db.models import Prefetch
         return (
             self.filter(is_active=True)
@@ -104,15 +104,24 @@ class ProductQuerySet(models.QuerySet):
                     to_attr='prefetched_images',
                 ),
                 Prefetch(
-                    'variants',
-                    queryset=ProductVariant.objects.filter(is_active=True).order_by('sku'),
-                    to_attr='prefetched_variants',
+                    'option_nodes',
+                    queryset=ProductOptionNode.objects
+                    .filter(node_type='material')
+                    .select_related('material')
+                    .order_by('sort_order', 'id'),
+                    to_attr='prefetched_materials',
                 ),
             )
         )
 
 
 class Product(models.Model):
+    STOCK_CHOICES = [
+        ('in_stock',     'В наличии'),
+        ('on_order',     'Под заказ'),
+        ('out_of_stock', 'Нет в наличии'),
+    ]
+
     name = models.CharField('Название', max_length=300)
     slug = models.SlugField('Slug', max_length=300, unique=True)
     category = models.ForeignKey(
@@ -123,6 +132,22 @@ class Product(models.Model):
     description = models.TextField('Описание', blank=True)
     profile_code = models.CharField('Номенклатурный код', max_length=100, blank=True)
     is_new = models.BooleanField('Новинка', default=False)
+    in_stock = models.CharField(
+        'Наличие', max_length=20,
+        choices=STOCK_CHOICES, default='in_stock',
+    )
+    allow_custom_size = models.BooleanField(
+        'Свой размер', default=False,
+        help_text='На карточке появится поле «Свой размер» — клиент укажет нужный, он уйдёт в заявку',
+    )
+    allow_custom_length = models.BooleanField(
+        'Своя длина', default=False,
+        help_text='Аналогично — поле «Своя длина»',
+    )
+    allow_custom_height = models.BooleanField(
+        'Своя высота', default=False,
+        help_text='Аналогично — поле «Своя высота»',
+    )
     seo_title = models.CharField('SEO Title', max_length=200, blank=True)
     seo_description = models.TextField('SEO Description', blank=True)
     is_active = models.BooleanField('Активен', default=True)
@@ -155,14 +180,17 @@ class Product(models.Model):
 
 
 class ProductImageQuerySet(models.QuerySet):
-    GALLERY_Q = models.Q(finish__isnull=True, color__isnull=True, color_group='')
+    GALLERY_Q = models.Q(
+        material__isnull=True, finish__isnull=True,
+        color__isnull=True, color_group='',
+    )
 
     def gallery(self):
         """Обычные фото товара (листаются миниатюрами)."""
         return self.filter(self.GALLERY_Q)
 
     def overrides(self):
-        """Фото под обработку/цвет — подменяют галерею при выборе на карточке."""
+        """Фото-правила с условиями показа — подменяют галерею при выборе."""
         return self.exclude(self.GALLERY_Q)
 
     def gallery_first(self):
@@ -179,12 +207,16 @@ class ProductImageQuerySet(models.QuerySet):
 
 
 class ProductImage(models.Model):
-    """Фото товара. Роль строки определяется заполненными полями:
+    """Фото товара — запись-правило. Роль определяется заполненными полями:
 
-    - finish/color/группа пустые — обычное фото галереи (порядок — sort_order);
-    - заполнены — фото, показываемое при выборе на карточке.
-    Fallback-цепочка на клиенте (от точного к общему):
-    обработка+цвет → обработка+группа → цвет → группа → обработка → галерея.
+    - материал/обработка/цвет/группа пустые — обычное фото галереи
+      (порядок — sort_order);
+    - заполнены — условия показа при выборе на карточке. Марка стали в условия
+      не входит намеренно: 304-золото и 430-золото выглядят одинаково.
+
+    Подбор на клиенте: отсеять фото, где хоть одно заполненное условие
+    противоречит выбору → из оставшихся взять с максимумом совпавших условий →
+    тай-брейк: цвет > обработка > материал → иначе галерея.
     """
     product = models.ForeignKey(
         Product, on_delete=models.CASCADE,
@@ -196,14 +228,22 @@ class ProductImage(models.Model):
         validators=IMAGE_UPLOAD_VALIDATORS,
         help_text=UPLOAD_HELP_TEXT,
     )
+    # PROTECT намеренно: удаление записи справочника не должно молча уносить
+    # с собой фото товаров
+    material = models.ForeignKey(
+        Material, on_delete=models.PROTECT,
+        null=True, blank=True,
+        verbose_name='Материал',
+        help_text='Фото для этого материала (пусто — для любого)',
+    )
     finish = models.ForeignKey(
-        Finish, on_delete=models.CASCADE,
+        Finish, on_delete=models.PROTECT,
         null=True, blank=True,
         verbose_name='Обработка',
         help_text='Фото для этой обработки',
     )
     color = models.ForeignKey(
-        Color, on_delete=models.CASCADE,
+        Color, on_delete=models.PROTECT,
         null=True, blank=True,
         verbose_name='Цвет',
         help_text='Фото под конкретный цвет',
@@ -258,32 +298,35 @@ class ProductImage(models.Model):
         ordering = ['sort_order']
         constraints = [
             models.UniqueConstraint(
-                fields=['product', 'finish', 'color'],
+                fields=['product', 'material', 'finish', 'color'],
                 condition=models.Q(color__isnull=False),
                 nulls_distinct=False,
-                name='uniq_product_image_finish_color',
-                violation_error_message='Фото для этой пары «обработка + цвет» уже есть.',
+                name='uniq_product_image_rule_color',
+                violation_error_message='Фото-правило с такими условиями (цвет) уже есть.',
             ),
             models.UniqueConstraint(
-                fields=['product', 'finish', 'color_group'],
+                fields=['product', 'material', 'finish', 'color_group'],
                 condition=~models.Q(color_group=''),
                 nulls_distinct=False,
-                name='uniq_product_image_finish_group',
-                violation_error_message='Фото для этой пары «обработка + группа цветов» уже есть.',
+                name='uniq_product_image_rule_group',
+                violation_error_message='Фото-правило с такими условиями (группа цветов) уже есть.',
             ),
             models.UniqueConstraint(
-                fields=['product', 'finish'],
-                condition=models.Q(
-                    finish__isnull=False, color__isnull=True, color_group='',
-                ),
-                name='uniq_product_image_finish_only',
-                violation_error_message='Фото для этой обработки (без цвета) уже есть.',
+                fields=['product', 'material', 'finish'],
+                condition=models.Q(color__isnull=True, color_group='')
+                & ~models.Q(material__isnull=True, finish__isnull=True),
+                nulls_distinct=False,
+                name='uniq_product_image_rule_plain',
+                violation_error_message='Фото-правило с такими условиями уже есть.',
             ),
         ]
 
     def __str__(self):
         target = ', '.join(
-            str(p) for p in (self.finish, self.color or self.get_color_group_display())
+            str(p) for p in (
+                self.material, self.finish,
+                self.color or self.get_color_group_display(),
+            )
             if p
         )
         if target:
@@ -301,102 +344,164 @@ class ProductImage(models.Model):
         super().save(*args, **kwargs)
 
 
-class ProductVariant(models.Model):
-    UNIT_CHOICES = [
-        ('m',     'метр'),
-        ('piece', 'штука'),
-        ('sheet', 'лист'),
-        ('kg',    'кг'),
-    ]
-    STOCK_CHOICES = [
-        ('in_stock',    'В наличии'),
-        ('on_order',    'Под заказ'),
-        ('out_of_stock', 'Нет в наличии'),
+class ProductOptionNode(models.Model):
+    """Узел дерева опций товара: материал → марка → обработка.
+
+    Дерево задаёт разрешённые сочетания — это единственное место, где
+    блокируются невозможные комбинации (у «Латуни» без дочерних марок нельзя
+    выбрать «304»). Узлы ссылаются на глобальные справочники, а не хранят
+    текст: фильтры каталога и условия фото работают по общим FK.
+
+    Цвета отмечаются на узле-обработке: «Полировка» под 304 и «Полировка»
+    под 430 — разные узлы, у каждого свой набор цветов из общего справочника.
+    Записей-комбинаций (SKU) в базе нет.
+    """
+    NODE_TYPE_CHOICES = [
+        ('material',    'Материал'),
+        ('steel_grade', 'Марка'),
+        ('finish',      'Обработка'),
     ]
 
     product = models.ForeignKey(
         Product, on_delete=models.CASCADE,
-        related_name='variants',
+        related_name='option_nodes',
         verbose_name='Товар',
     )
-    sku = models.CharField('Артикул', max_length=100, unique=True)
-
+    parent = models.ForeignKey(
+        'self', on_delete=models.CASCADE,
+        null=True, blank=True,
+        related_name='children',
+        verbose_name='Родитель',
+    )
+    node_type = models.CharField('Тип узла', max_length=20, choices=NODE_TYPE_CHOICES)
     material = models.ForeignKey(
-        Material, on_delete=models.PROTECT,
+        Material, on_delete=models.CASCADE,
+        null=True, blank=True,
+        related_name='option_nodes',
         verbose_name='Материал',
     )
     steel_grade = models.ForeignKey(
-        SteelGrade, on_delete=models.SET_NULL,
+        SteelGrade, on_delete=models.CASCADE,
         null=True, blank=True,
+        related_name='option_nodes',
         verbose_name='Марка стали',
     )
     finish = models.ForeignKey(
-        Finish, on_delete=models.SET_NULL,
+        Finish, on_delete=models.CASCADE,
         null=True, blank=True,
+        related_name='option_nodes',
         verbose_name='Обработка',
     )
-
-    size = models.CharField(
-        'Размер', max_length=50, blank=True,
-        help_text='Например: 6×6, 10×10, 40×20',
+    colors = models.ManyToManyField(
+        Color, blank=True,
+        related_name='option_nodes',
+        verbose_name='Доступные цвета',
+        help_text='Имеет смысл только на узле-обработке',
     )
-    allow_custom_size = models.BooleanField(
-        'Свой размер', default=False,
-        help_text='На карточке товара появится поле «Свой размер» — '
-                  'клиент укажет нужный размер, он уйдёт в заявку',
-    )
-    height_mm = models.DecimalField(
-        'Высота, мм', max_digits=8, decimal_places=2,
-        null=True, blank=True,
-    )
-    length_m = models.DecimalField(
-        'Длина, м', max_digits=8, decimal_places=2,
-        null=True, blank=True,
-    )
-    allow_custom_length = models.BooleanField(
-        'Своя длина', default=False,
-        help_text='На карточке товара появится поле «Своя длина» — '
-                  'клиент укажет нужную длину, она уйдёт в заявку',
-    )
-    unit = models.CharField('Единица измерения', max_length=10, choices=UNIT_CHOICES, default='m')
-    in_stock = models.CharField(
-        'Наличие', max_length=20,
-        choices=STOCK_CHOICES, default='in_stock',
-    )
-    is_active = models.BooleanField('Активен', default=True)
+    sort_order = models.PositiveIntegerField('Порядок', default=0)
 
     class Meta:
-        verbose_name = 'Вариант товара'
-        verbose_name_plural = 'Варианты товара'
-        ordering = ['sku']
+        verbose_name = 'Узел опций товара'
+        verbose_name_plural = 'Дерево опций товара'
+        ordering = ['sort_order', 'id']
+        constraints = [
+            # Один и тот же справочный элемент не дублируется под одним родителем
+            models.UniqueConstraint(
+                fields=['product', 'parent', 'node_type',
+                        'material', 'steel_grade', 'finish'],
+                nulls_distinct=False,
+                name='uniq_product_option_node',
+                violation_error_message='Такой узел у товара уже есть.',
+            ),
+        ]
 
     def __str__(self):
-        return f'{self.product} / {self.sku}'
+        return f'{self.product} / {self.get_node_type_display()}: {self.ref}'
+
+    @property
+    def ref(self):
+        """Справочный объект узла."""
+        return self.material or self.steel_grade or self.finish
 
     def clean(self):
-        # 1. Марка стали должна принадлежать выбранному материалу
-        if self.steel_grade_id and self.material_id:
-            if self.steel_grade.material_id != self.material_id:
-                raise ValidationError({
-                    'steel_grade': (
-                        'Марка стали не соответствует выбранному материалу. '
-                        f'Ожидается материал «{self.steel_grade.material}».'
-                    )
-                })
+        refs = {
+            'material':    self.material_id,
+            'steel_grade': self.steel_grade_id,
+            'finish':      self.finish_id,
+        }
+        expected = refs.pop(self.node_type, None)
+        if not expected or any(refs.values()):
+            raise ValidationError(
+                'У узла должен быть заполнен ровно один справочник, '
+                'соответствующий типу узла.'
+            )
 
-        # 2. Если у материала нет активных марок — steel_grade должен быть пустым
-        if self.material_id and not self.steel_grade_id:
-            pass  # пустой steel_grade всегда допустим
-
-        if self.steel_grade_id and self.material_id:
-            has_grades = SteelGrade.objects.filter(
-                material_id=self.material_id, is_active=True,
-            ).exists()
-            if not has_grades:
+        # Форма дерева: материал — корень; марка — под материалом своего
+        # материала; обработка — под материалом или маркой
+        if self.node_type == 'material':
+            if self.parent_id:
+                raise ValidationError({'parent': 'Материал — корневой узел, без родителя.'})
+        elif self.node_type == 'steel_grade':
+            if not self.parent_id or self.parent.node_type != 'material':
+                raise ValidationError({'parent': 'Марка должна висеть под материалом.'})
+            if self.steel_grade.material_id != self.parent.material_id:
                 raise ValidationError({
-                    'steel_grade': 'У выбранного материала нет активных марок стали.',
+                    'steel_grade': 'Марка принадлежит другому материалу — '
+                                   f'ожидается «{self.steel_grade.material}».',
                 })
+        elif self.node_type == 'finish':
+            if not self.parent_id or self.parent.node_type not in ('material', 'steel_grade'):
+                raise ValidationError({'parent': 'Обработка должна висеть под материалом или маркой.'})
+        if self.parent_id and self.parent.product_id != self.product_id:
+            raise ValidationError({'parent': 'Родительский узел принадлежит другому товару.'})
 
     def save(self, *args, **kwargs):
         self.full_clean()
         super().save(*args, **kwargs)
+
+
+class ProductParamValue(models.Model):
+    """Значение свободного параметра товара (размер / длина / высота).
+
+    Плоские независимые списки: невозможных сочетаний не создают и от дерева
+    опций не зависят. Нет строк параметра — селектор на карточке не показывается.
+    Ручной ввод покупателя включается флагами allow_custom_* на товаре.
+    """
+    KIND_CHOICES = [
+        ('size',   'Размер'),
+        ('length', 'Длина'),
+        ('height', 'Высота'),
+    ]
+    # Подписи значений на витрине: длина в метрах, высота в миллиметрах
+    KIND_UNITS = {'size': '', 'length': ' м', 'height': ' мм'}
+
+    product = models.ForeignKey(
+        Product, on_delete=models.CASCADE,
+        related_name='param_values',
+        verbose_name='Товар',
+    )
+    kind = models.CharField('Параметр', max_length=10, choices=KIND_CHOICES)
+    value = models.CharField(
+        'Значение', max_length=50,
+        help_text='Размер — «20×20», длина — «3» (м), высота — «40» (мм)',
+    )
+    sort_order = models.PositiveIntegerField('Порядок', default=0)
+
+    class Meta:
+        verbose_name = 'Параметр товара'
+        verbose_name_plural = 'Параметры товара'
+        ordering = ['kind', 'sort_order', 'id']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['product', 'kind', 'value'],
+                name='uniq_product_param_value',
+                violation_error_message='Такое значение у этого параметра уже есть.',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.product} / {self.get_kind_display()}: {self.value}'
+
+    @property
+    def display(self):
+        return f'{self.value}{self.KIND_UNITS.get(self.kind, "")}'

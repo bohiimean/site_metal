@@ -8,16 +8,15 @@
 {% block extra_head %}
 <script type="application/ld+json">{{ schema_org|safe }}</script>
 {{ images_json|json_script:"images-data" }}
-{{ variants_json|json_script:"variants-data" }}
-{{ combinations_json|json_script:"combinations-data" }}
-{{ grade_colors_json|json_script:"grade-colors-data" }}
-{{ material_colors_json|json_script:"material-colors-data" }}
-{{ color_images_json|json_script:"color-images-data" }}
+{{ product_json|json_script:"product-data" }}
+{{ tree_json|json_script:"tree-data" }}
+{{ params_json|json_script:"params-data" }}
+{{ photo_rules_json|json_script:"photo-rules-data" }}
 {% endblock %}
 
 {% block content %}
 <div class="max-w-7xl mx-auto px-6 lg:px-12 py-6"
-     x-data="productVariants()"
+     x-data="productOptions()"
      x-init="init()">
 
   <!-- Хлебные крошки -->
@@ -83,21 +82,34 @@
         </div>
       </div>
 
-      <!-- Миниатюры вариантов убраны намеренно: под основным фото показываем
-           только главное изображение. Смена фото по-прежнему работает при
-           выборе обработки/цвета (displayImage управляется Alpine). -->
+      <!-- Миниатюры галереи -->
+      <template x-if="images.length > 1">
+        <div class="flex gap-2 mt-3 overflow-x-auto scrollbar-none">
+          <template x-for="(img, i) in images" :key="i">
+            <button @click="selectImageIndex(i)"
+                    :class="activeIndex === i && !ruleImage
+                      ? 'ring-2 ring-accent'
+                      : 'ring-1 ring-border hover:ring-accent/50'"
+                    class="w-16 h-16 shrink-0 rounded-sm overflow-hidden transition-shadow">
+              <img :src="img.thumb" alt="" class="w-full h-full object-cover">
+            </button>
+          </template>
+        </div>
+      </template>
     </div>
 
     <!-- ─── Информация о товаре ─── -->
     <div class="flex flex-col gap-[22px]">
 
-      <!-- Название + артикул -->
+      <!-- Название -->
       <div>
         <h1 class="text-[26px] font-bold text-primary leading-[1.3] mb-2.5">{{ product.name }}</h1>
-        <p class="text-[12px] text-muted" x-text="current ? 'Арт. ' + current.sku : ''"></p>
+        {% if product.profile_code %}
+          <p class="text-[12px] text-muted">{{ product.profile_code }}</p>
+        {% endif %}
       </div>
 
-      <!-- Цена по запросу -->
+      <!-- Цена по запросу + наличие -->
       <div>
         <div class="flex items-baseline gap-2.5">
           <span class="text-[22px] font-black text-primary leading-none">Цена по запросу</span>
@@ -105,27 +117,25 @@
         <p class="text-[12px] text-muted mt-1.5">
           Точную стоимость рассчитает менеджер после отправки заявки
         </p>
-        <span class="inline-block mt-1.5 text-[11px] font-medium px-2 py-0.5 rounded-sm"
-              :class="{
-                'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400': current && current.in_stock === 'in_stock',
-                'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400': current && current.in_stock === 'on_order',
-                'bg-border text-muted': !current || current.in_stock === 'out_of_stock'
-              }"
-              x-text="current ? current.in_stock_display : ''">
+        <span class="inline-block mt-1.5 text-[11px] font-medium px-2 py-0.5 rounded-sm
+          {% if product.in_stock == 'in_stock' %}bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400
+          {% elif product.in_stock == 'on_order' %}bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400
+          {% else %}bg-border text-muted{% endif %}">
+          {{ product.get_in_stock_display }}
         </span>
       </div>
 
-      <!-- Тип металла (pill-таб) -->
-      <template x-if="uniqueMaterials.length > 1">
+      <!-- Материал (pill-таб) -->
+      <template x-if="tree.length > 1">
         <div>
           <p class="text-[12px] font-semibold text-primary mb-2.5">
-            Тип металла: <span class="font-normal text-muted" x-text="current ? current.material_name : ''"></span>
+            Тип металла: <span class="font-normal text-muted" x-text="currentMaterial ? currentMaterial.name : ''"></span>
           </p>
           <div class="flex gap-1 bg-surface-alt p-1 rounded-md">
-            <template x-for="mat in uniqueMaterials" :key="mat.id">
+            <template x-for="mat in tree" :key="mat.material_id">
               <button
-                @click="selectMaterial(mat.id)"
-                :class="sel.material_id === mat.id
+                @click="selectMaterial(mat.material_id)"
+                :class="sel.material_id === mat.material_id
                   ? 'bg-accent text-accent-fg font-bold'
                   : 'text-primary font-medium hover:text-accent'"
                 class="flex-1 text-center py-2.5 text-[12px] rounded-sm transition-all"
@@ -136,22 +146,19 @@
         </div>
       </template>
 
-      <!-- Марка стали (pill-таб) — только когда марок больше одной -->
-      <template x-if="uniqueSteelGrades.length > 1">
+      <!-- Марка стали — только когда у материала есть марки -->
+      <template x-if="grades.length > 0">
         <div>
           <p class="text-[12px] font-semibold text-primary mb-2.5">
-            Марка стали: <span class="font-normal text-muted" x-text="current ? (current.steel_grade_name || '—') : ''"></span>
+            Марка стали: <span class="font-normal text-muted" x-text="currentGrade ? currentGrade.name : '—'"></span>
           </p>
           <div class="flex flex-wrap gap-2">
-            <template x-for="gr in uniqueSteelGrades" :key="gr.id">
+            <template x-for="gr in grades" :key="gr.grade_id">
               <button
-                @click="selectSteelGrade(gr.id)"
-                :disabled="!isValid('steel_grade_id', gr.id)"
-                :class="{
-                  'bg-accent text-accent-fg border-accent': sel.steel_grade_id === gr.id,
-                  'bg-surface text-primary border-border-strong hover:border-accent': sel.steel_grade_id !== gr.id,
-                  'opacity-30 cursor-not-allowed': !isValid('steel_grade_id', gr.id)
-                }"
+                @click="selectGrade(gr.grade_id)"
+                :class="sel.grade_id === gr.grade_id
+                  ? 'bg-accent text-accent-fg border-accent'
+                  : 'bg-surface text-primary border-border-strong hover:border-accent'"
                 class="px-4 py-[9px] text-[12px] font-semibold border rounded-sm transition-colors"
                 x-text="gr.name">
               </button>
@@ -160,22 +167,19 @@
         </div>
       </template>
 
-      <!-- Обработка (pill-таб) — только когда обработок больше одной -->
-      <template x-if="uniqueFinishes.length > 1">
+      <!-- Обработка — доступные обработки выбранной ветки дерева -->
+      <template x-if="finishes.length > 0">
         <div>
           <p class="text-[12px] font-semibold text-primary mb-2.5">
-            Обработка: <span class="font-normal text-muted" x-text="current ? (current.finish_name || '—') : ''"></span>
+            Обработка: <span class="font-normal text-muted" x-text="currentFinish ? currentFinish.name : '—'"></span>
           </p>
           <div class="flex flex-wrap gap-1 bg-surface-alt p-1 rounded-md">
-            <template x-for="fin in uniqueFinishes" :key="fin.id">
+            <template x-for="fin in finishes" :key="fin.id">
               <button
-                @click="selectFinish(fin.id)"
-                :disabled="!isValid('finish_id', fin.id)"
-                :class="{
-                  'bg-accent text-accent-fg font-bold': sel.finish_id === fin.id,
-                  'text-primary font-medium hover:text-accent': sel.finish_id !== fin.id,
-                  'opacity-30 cursor-not-allowed': !isValid('finish_id', fin.id)
-                }"
+                @click="selectFinish(fin.finish_id)"
+                :class="sel.finish_id === fin.finish_id
+                  ? 'bg-accent text-accent-fg font-bold'
+                  : 'text-primary font-medium hover:text-accent'"
                 class="flex-1 text-center py-2.5 text-[12px] rounded-sm transition-all whitespace-nowrap"
                 x-text="fin.name">
               </button>
@@ -184,20 +188,20 @@
         </div>
       </template>
 
-      <!-- Подпись «Не окрашивается» — когда есть несколько материалов,
-           но ни одна обработка выбранного материала не имеет палитры -->
-      <template x-if="uniqueMaterials.length > 1 && !currentMaterialHasColors">
+      <!-- Подпись «Не окрашивается» — материалов несколько, а у выбранной
+           ветки ни одна обработка не имеет цветов -->
+      <template x-if="tree.length > 1 && !branchHasColors">
         <p class="text-[12px] text-muted italic">Этот материал не окрашивается</p>
       </template>
 
       <!-- ── Цвет: режим swatches ── -->
-      <template x-if="uniqueColors.length > 0 && colorUiMode === 'swatches'">
+      <template x-if="colors.length > 0 && colorUiMode === 'swatches'">
         <div>
           <p class="text-[12px] font-semibold text-primary mb-2.5">
             Цвет / отделка: <span class="font-normal text-muted" x-text="selectedColorName"></span>
           </p>
           <div class="flex flex-wrap gap-3">
-            <template x-for="c in uniqueColors" :key="c.id">
+            <template x-for="c in colors" :key="c.id">
               <button
                 @click="selectColor(c.id)"
                 :title="c.name"
@@ -210,7 +214,7 @@
       </template>
 
       <!-- ── Цвет: режим ral_palette (шлифованный / полированный) ── -->
-      <template x-if="uniqueColors.length > 0 && colorUiMode === 'ral_palette'">
+      <template x-if="colors.length > 0 && colorUiMode === 'ral_palette'">
         <div>
           <p class="text-[12px] font-semibold text-primary mb-2.5">
             Цвет / отделка: <span class="font-normal text-muted" x-text="selectedColorName"></span>
@@ -229,7 +233,7 @@
           <!-- Кнопка раскрытия палитры -->
           <button @click="ralOpen = !ralOpen"
                   class="inline-flex items-center gap-1.5 text-[12px] font-semibold text-accent mb-2.5">
-            <span x-text="'Показать всю палитру (' + uniqueColors.length + ')'"></span>
+            <span x-text="'Показать всю палитру (' + colors.length + ')'"></span>
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
                  :style="'transition:.15s;transform:rotate(' + (ralOpen ? '180' : '0') + 'deg)'">
               <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
@@ -275,7 +279,7 @@
       </template>
 
       <!-- ── Цвет: режим custom_request (под покраску) ── -->
-      <template x-if="uniqueColors.length > 0 && colorUiMode === 'custom_request'">
+      <template x-if="colors.length > 0 && colorUiMode === 'custom_request'">
         <div>
           <p class="text-[12px] font-semibold text-primary mb-2.5">
             Цвет / отделка: <span class="font-normal text-muted" x-text="selectedColorName"></span>
@@ -325,84 +329,41 @@
         </div>
       </template>
 
-      <!-- Размер -->
-      <template x-if="uniqueSizes.length > 0 || customSizeAvailable">
-        <div>
+      <!-- ── Свободные параметры: размер / длина / высота ── -->
+      <template x-for="param in paramConfigs" :key="param.kind">
+        <div x-show="param.values.length > 0 || param.allowCustom">
           <p class="text-[12px] font-semibold text-primary mb-2.5">
-            Размер: <span class="font-normal text-muted" x-text="sizeLabel"></span>
+            <span x-text="param.title + ':'"></span>
+            <span class="font-normal text-muted" x-text="paramLabel(param)"></span>
           </p>
           <div class="flex flex-wrap gap-2">
-            <template x-for="sz in uniqueSizes" :key="sz">
+            <template x-for="val in param.values" :key="val">
               <button
-                @click="selectSize(sz)"
-                :disabled="!isValid('size', sz)"
-                :class="{
-                  'bg-accent text-accent-fg border-accent': !customSizeActive && sel.size === sz,
-                  'bg-surface text-primary border-border-strong hover:border-accent': customSizeActive || sel.size !== sz,
-                  'opacity-30 cursor-not-allowed': !isValid('size', sz)
-                }"
+                @click="selectParam(param.kind, val)"
+                :class="!customActive[param.kind] && selParams[param.kind] === val
+                  ? 'bg-accent text-accent-fg border-accent'
+                  : 'bg-surface text-primary border-border-strong hover:border-accent'"
                 class="px-4 py-[9px] text-[12px] font-semibold border rounded-sm transition-colors"
-                x-text="sz">
+                x-text="val + param.unit">
               </button>
             </template>
-            <template x-if="customSizeAvailable">
+            <template x-if="param.allowCustom">
               <button
-                @click="activateCustomSize()"
-                :class="customSizeActive
+                @click="activateCustom(param.kind)"
+                :class="customActive[param.kind]
                   ? 'bg-accent text-accent-fg border-accent'
                   : 'bg-surface text-accent border-dashed border-accent hover:bg-surface-alt'"
-                class="px-4 py-[9px] text-[12px] font-semibold border rounded-sm transition-colors">
-                Свой размер
+                class="px-4 py-[9px] text-[12px] font-semibold border rounded-sm transition-colors"
+                x-text="param.customLabel">
               </button>
             </template>
           </div>
-          <!-- Поле своего размера -->
-          <div x-show="customSizeActive" x-cloak class="mt-2.5 flex items-center gap-2">
-            <input type="text" x-model="customSize"
-                   placeholder="Например: 25×25"
+          <!-- Поле своего значения -->
+          <div x-show="customActive[param.kind]" x-cloak class="mt-2.5 flex items-center gap-2">
+            <input type="text" x-model="customValues[param.kind]"
+                   :placeholder="param.placeholder"
                    class="w-[130px] border border-border-strong rounded-sm px-3 py-2 text-[12.5px] text-primary bg-surface placeholder:text-muted outline-none focus:border-accent">
             <span class="text-[12px] text-muted">возможность изготовления подтвердит менеджер</span>
-          </div>
-        </div>
-      </template>
-
-      <!-- Длина -->
-      <template x-if="uniqueLengths.length > 0 || customLengthAvailable">
-        <div>
-          <p class="text-[12px] font-semibold text-primary mb-2.5">
-            Длина: <span class="font-normal text-muted" x-text="lengthLabel"></span>
-          </p>
-          <div class="flex flex-wrap gap-2">
-            <template x-for="len in uniqueLengths" :key="len">
-              <button
-                @click="selectLength(len)"
-                :disabled="!isValid('length_m', len)"
-                :class="{
-                  'bg-accent text-accent-fg border-accent': !customLenActive && sel.length_m === len,
-                  'bg-surface text-primary border-border-strong hover:border-accent': customLenActive || sel.length_m !== len,
-                  'opacity-30 cursor-not-allowed': !isValid('length_m', len)
-                }"
-                class="px-4 py-[9px] text-[12px] font-semibold border rounded-sm transition-colors"
-                x-text="len + ' м'">
-              </button>
-            </template>
-            <template x-if="customLengthAvailable">
-              <button
-                @click="activateCustomLength()"
-                :class="customLenActive
-                  ? 'bg-accent text-accent-fg border-accent'
-                  : 'bg-surface text-accent border-dashed border-accent hover:bg-surface-alt'"
-                class="px-4 py-[9px] text-[12px] font-semibold border rounded-sm transition-colors">
-                Своя длина
-              </button>
-            </template>
-          </div>
-          <!-- Поле своей длины -->
-          <div x-show="customLenActive" x-cloak class="mt-2.5 flex items-center gap-2">
-            <input type="number" step="0.1" min="0.1" x-model="customLen"
-                   placeholder="Например: 2.7"
-                   class="w-[130px] border border-border-strong rounded-sm px-3 py-2 text-[12.5px] text-primary bg-surface placeholder:text-muted outline-none focus:border-accent">
-            <span class="text-[12px] text-muted">м — точную возможность резки подтвердит менеджер</span>
           </div>
         </div>
       </template>
@@ -411,7 +372,7 @@
       <div class="flex flex-col sm:flex-row gap-2.5 pt-1">
         <button
           @click="addCurrentToCart()"
-          :disabled="!current || current.in_stock === 'out_of_stock'"
+          {% if product.in_stock == 'out_of_stock' %}disabled{% endif %}
           class="btn-accent flex-1 disabled:opacity-50 disabled:cursor-not-allowed">
           В корзину
         </button>
@@ -451,27 +412,24 @@
 </div>
 
 <script>
-function productVariants() {
+function productOptions() {
   return {
-    variants:     [],
-    combinations: [],
-    gradeColors:  {},    // {steel_grade_id: [{id, name, hex, ral_code, group}]} — палитра марки стали
-    materialColors: {},  // {material_id: [...]} — фолбэк-палитра материала (варианты без марки)
-    colorImages:  {},   // {"finish:<id>|color:<id>"|"color:<id>"|"group:<key>"|"finish:<id>"…: {thumb, card, gallery, zoom}}
-    images:       [],   // [{thumb, gallery, zoom}] — фото товара по порядку
-    sel: { material_id: null, steel_grade_id: null, finish_id: null, size: null, length_m: null },
-    selColor:     null, // цвет — параметр заказа, в комбинации вариантов не входит
-    current:      null,
-    activeIndex:  0,    // индекс выбранной миниатюры в images
+    product:    {},
+    tree:       [],   // [{material_id, name, grades:[{grade_id, name, finishes:[...]}], finishes:[...]}]
+    params:     {},   // {size: [...], length: [...], height: [...]}
+    photoRules: [],   // [{material_id, finish_id, color_id, color_group, urls}]
+    images:     [],   // [{thumb, gallery, zoom}] — галерея товара
+
+    // Выбор: справочные id дерева + значения свободных параметров
+    sel:       { material_id: null, grade_id: null, finish_id: null },
+    selColor:  null,
+    selParams: { size: null, length: null, height: null },
+
+    customActive: { size: false, length: false, height: false },
+    customValues: { size: '',   length: '',    height: '' },
+
+    activeIndex:  0,
     lightboxOpen: false,
-
-    // Своя длина — параметр заказа (для вариантов с allow_custom_length)
-    customLenActive: false,
-    customLen:       '',
-
-    // Свой размер — параметр заказа (для вариантов с allow_custom_size)
-    customSizeActive: false,
-    customSize:       '',
 
     // RAL-палитра
     ralOpen:   false,
@@ -485,167 +443,173 @@ function productVariants() {
     customLastText:  '',
 
     init() {
-      this.images       = JSON.parse(document.getElementById('images-data').textContent);
-      this.variants     = JSON.parse(document.getElementById('variants-data').textContent);
-      this.combinations = JSON.parse(document.getElementById('combinations-data').textContent);
-      this.gradeColors    = JSON.parse(document.getElementById('grade-colors-data').textContent);
-      this.materialColors = JSON.parse(document.getElementById('material-colors-data').textContent);
-      this.colorImages  = JSON.parse(document.getElementById('color-images-data').textContent);
+      this.images     = JSON.parse(document.getElementById('images-data').textContent);
+      this.product    = JSON.parse(document.getElementById('product-data').textContent);
+      this.tree       = JSON.parse(document.getElementById('tree-data').textContent);
+      this.params     = JSON.parse(document.getElementById('params-data').textContent);
+      this.photoRules = JSON.parse(document.getElementById('photo-rules-data').textContent);
 
-      // Предзагрузка фото цветов, чтобы переключение не мигало
-      Object.values(this.colorImages).forEach(u => {
-        if (u.gallery) { const img = new Image(); img.src = u.gallery; }
+      // Предзагрузка фото-правил, чтобы переключение не мигало
+      this.photoRules.forEach(r => {
+        if (r.urls.gallery) { const img = new Image(); img.src = r.urls.gallery; }
       });
 
-      if (!this.variants.length) return;
+      // Инициализация из URL (шаринг ссылки на исполнение) или дефолты
+      const q = new URLSearchParams(location.search);
+      this._applyState({
+        material_id: parseInt(q.get('material'), 10) || null,
+        grade_id:    parseInt(q.get('grade'), 10)    || null,
+        finish_id:   parseInt(q.get('finish'), 10)   || null,
+        color_id:    parseInt(q.get('color'), 10)    || null,
+        size:   q.get('size'),
+        length: q.get('length'),
+        height: q.get('height'),
+      });
+      this._syncUrl(true);
 
-      const params = new URLSearchParams(location.search);
-      const sku = params.get('sku');
-      const v   = sku ? this.variants.find(v => v.sku === sku) : null;
-      // При первичной инициализации — replaceState, чтобы не создавать лишнюю запись
-      this._pickVariant(v || this.variants[0], /*replace=*/true);
-
-      const colorId = parseInt(params.get('color'), 10);
-      if (colorId && this.uniqueColors.some(c => c.id === colorId)) {
-        this.selColor = colorId;
-      }
-
-      // Реакция на back/forward — переставить вариант по sku из URL
+      // Реакция на back/forward
       window.addEventListener('popstate', () => {
         const p = new URLSearchParams(location.search);
-        const s = p.get('sku');
-        const found = s ? this.variants.find(x => x.sku === s) : null;
-        if (found) this._pickVariant(found, /*replace=*/true);
-        const c = parseInt(p.get('color'), 10);
-        this.selColor = (c && this.uniqueColors.some(x => x.id === c)) ? c : null;
+        this._applyState({
+          material_id: parseInt(p.get('material'), 10) || null,
+          grade_id:    parseInt(p.get('grade'), 10)    || null,
+          finish_id:   parseInt(p.get('finish'), 10)   || null,
+          color_id:    parseInt(p.get('color'), 10)    || null,
+          size:   p.get('size'),
+          length: p.get('length'),
+          height: p.get('height'),
+        });
+      });
+    },
+
+    // Восстановить выбор из состояния, недостающее — заполнить дефолтами
+    // (первый материал → его первая марка → первая обработка ветки)
+    _applyState(s) {
+      const mat = this.tree.find(m => m.material_id === s.material_id) || this.tree[0];
+      this.sel.material_id = mat ? mat.material_id : null;
+
+      const grades = mat ? mat.grades : [];
+      const grade = grades.find(g => g.grade_id === s.grade_id) || grades[0] || null;
+      this.sel.grade_id = grade ? grade.grade_id : null;
+
+      const finishes = grade ? grade.finishes : (mat ? mat.finishes : []);
+      const fin = finishes.find(f => f.finish_id === s.finish_id) || finishes[0] || null;
+      this.sel.finish_id = fin ? fin.finish_id : null;
+
+      const colors = fin ? fin.colors : [];
+      this.selColor = colors.some(c => c.id === s.color_id) ? s.color_id : null;
+
+      ['size', 'length', 'height'].forEach(kind => {
+        const values = this.params[kind] || [];
+        this.selParams[kind] = values.includes(s[kind]) ? s[kind] : (values[0] || null);
+        this.customActive[kind] = false;
+        this.customValues[kind] = '';
       });
     },
 
     _syncUrl(replace = false) {
-      if (!this.current) return;
-      let url = '?sku=' + encodeURIComponent(this.current.sku);
-      if (this.selColor) url += '&color=' + this.selColor;
+      const q = new URLSearchParams();
+      if (this.sel.material_id) q.set('material', this.sel.material_id);
+      if (this.sel.grade_id)    q.set('grade', this.sel.grade_id);
+      if (this.sel.finish_id)   q.set('finish', this.sel.finish_id);
+      if (this.selColor)        q.set('color', this.selColor);
+      ['size', 'length', 'height'].forEach(kind => {
+        if (this.selParams[kind] && !this.customActive[kind]) q.set(kind, this.selParams[kind]);
+      });
+      const url = q.toString() ? '?' + q.toString() : location.pathname;
       if (replace) history.replaceState({}, '', url);
       else         history.pushState({}, '', url);
     },
 
-    _pickVariant(v, replace = false) {
-      if (!v) return;
-      this.sel = {
-        material_id:    v.material_id,
-        steel_grade_id: v.steel_grade_id,
-        finish_id:      v.finish_id,
-        size:           v.size,
-        length_m:       v.length_m,
-      };
-      this.current = v;
-      this._syncUrl(replace);
+    // ── Дерево: текущая ветка ──
+    get currentMaterial() {
+      return this.tree.find(m => m.material_id === this.sel.material_id) || null;
+    },
+    get grades() {
+      return this.currentMaterial ? this.currentMaterial.grades : [];
+    },
+    get currentGrade() {
+      return this.grades.find(g => g.grade_id === this.sel.grade_id) || null;
+    },
+    // Обработки выбранной ветки: марки, если она выбрана, иначе — материала
+    get finishes() {
+      if (this.currentGrade) return this.currentGrade.finishes;
+      return this.currentMaterial ? this.currentMaterial.finishes : [];
+    },
+    get currentFinish() {
+      return this.finishes.find(f => f.finish_id === this.sel.finish_id) || null;
+    },
+    // Цвета листа-обработки: у «Полировки» под 304 и под 430 — свои наборы
+    get colors() {
+      return this.currentFinish ? this.currentFinish.colors : [];
+    },
+    get colorUiMode() {
+      return this.currentFinish ? (this.currentFinish.color_ui || 'swatches') : 'swatches';
+    },
+    get branchHasColors() {
+      const inFinishes = list => list.some(f => f.colors.length > 0);
+      const mat = this.currentMaterial;
+      if (!mat) return false;
+      return inFinishes(mat.finishes) || mat.grades.some(g => inFinishes(g.finishes));
     },
 
-    _autoSelect() {
-      // Ищем вариант, максимально совпадающий с sel.
-      // Если точного матча нет — постепенно ослабляем ограничения снизу вверх
-      // (сначала отбрасываем length, потом size, потом finish, потом steel_grade).
-      const s = this.sel;
-      const constraints = [
-        v => s.material_id    == null || v.material_id    === s.material_id,
-        v => s.steel_grade_id == null || v.steel_grade_id === s.steel_grade_id,
-        v => s.finish_id      == null || v.finish_id      === s.finish_id,
-        v => s.size           == null || v.size           === s.size,
-        v => s.length_m       == null || v.length_m       === s.length_m,
-      ];
-      for (let drop = 0; drop <= constraints.length; drop++) {
-        const active = constraints.slice(0, constraints.length - drop);
-        const match = this.variants.find(v => active.every(fn => fn(v)));
-        if (match) { this._pickVariant(match); return; }
-      }
-    },
-
-    selectMaterial(id) {
-      this.sel = { material_id: id, steel_grade_id: null, finish_id: null, size: null, length_m: null };
-      this.selColor = null; // палитра зависит от марки — у нового материала она другая
-      this.customLenActive = false;
-      this.customLen = '';
-      this.customSizeActive = false;
-      this.customSize = '';
+    // ── Выбор ──
+    _resetColorUI() {
       this.ralOpen = false;
       this.customOpen = false;
       this.customSubmitted = false;
-      this._autoSelect();
     },
-    selectSteelGrade(id) {
-      this.sel.steel_grade_id = id;
-      this.customLenActive = false;
-      this.customLen = '';
-      this.customSizeActive = false;
-      this.customSize = '';
-      this._autoSelect();
-      // Палитра у каждой марки своя — цвет вне новой палитры сбрасываем
-      if (this.selColor && !this.uniqueColors.some(c => c.id === this.selColor)) {
+    selectMaterial(id) {
+      this._applyState({ material_id: id, size: this.selParams.size,
+                         length: this.selParams.length, height: this.selParams.height });
+      this._resetColorUI();
+      this._syncUrl();
+    },
+    selectGrade(id) {
+      this.sel.grade_id = id;
+      // Обработки и цвета у новой марки свои: держим ту же обработку,
+      // если она есть в новой ветке, иначе — первую
+      const fin = this.finishes.find(f => f.finish_id === this.sel.finish_id) || this.finishes[0] || null;
+      this.sel.finish_id = fin ? fin.finish_id : null;
+      if (this.selColor && !this.colors.some(c => c.id === this.selColor)) {
         this.selColor = null;
       }
+      this._resetColorUI();
+      this._syncUrl();
     },
     selectFinish(id) {
       this.sel.finish_id = id;
-      this.sel.size      = null;
-      this.sel.length_m  = null;
-      this.customLenActive = false;
-      this.customLen = '';
-      this.customSizeActive = false;
-      this.customSize = '';
-      this.ralOpen = false;
-      this.customOpen = false;
-      this.customSubmitted = false;
-      this._autoSelect();
-      // Палитра привязана к марке стали — при смене обработки цвет сохраняется,
-      // меняется только интерфейс выбора (colorUiMode). Сбрасываем цвет, только
-      // если палитра стала недоступна (сменилась марка или пропала обработка)
-      if (this.selColor && !this.uniqueColors.some(c => c.id === this.selColor)) {
+      // Набор цветов у каждой обработки свой — цвет вне набора сбрасываем
+      if (this.selColor && !this.colors.some(c => c.id === this.selColor)) {
         this.selColor = null;
       }
+      this._resetColorUI();
+      this._syncUrl();
     },
     selectColor(id) {
       this.selColor = (this.selColor === id) ? null : id;
       this.ralOpen = false;
       this._syncUrl();
     },
-    selectSize(sz) {
-      this.customSizeActive = false;
-      this.customSize = '';
-      this.sel.size = sz;
-      this._autoSelect();
+    selectParam(kind, val) {
+      this.customActive[kind] = false;
+      this.customValues[kind] = '';
+      this.selParams[kind] = val;
+      this._syncUrl();
     },
-    activateCustomSize() {
-      this.customSizeActive = true;
-      // Привязываемся к любому варианту текущей комбинации (размер уточняется клиентом)
-      this.sel.size = null;
-      this._autoSelect();
-      this.customSizeActive = true; // _pickVariant перезаписывает sel — восстанавливаем флаг
-    },
-    selectLength(len) {
-      this.customLenActive = false;
-      this.customLen = '';
-      this.sel.length_m = len;
-      this._autoSelect();
-    },
-    activateCustomLength() {
-      this.customLenActive = true;
-      // Привязываемся к любому варианту текущей комбинации (длина уточняется клиентом)
-      this.sel.length_m = null;
-      this._autoSelect();
-      this.customLenActive = true; // _pickVariant перезаписывает sel — восстанавливаем флаг
+    activateCustom(kind) {
+      this.customActive[kind] = true;
+      this._syncUrl();
     },
     selectImageIndex(i) {
       this.activeIndex = i;
-      this.selColor = null; // ручной выбор фото сбрасывает цветовое
     },
 
     submitCustomColor() {
       if (!this.customText.trim()) return;
       const text = this.customText.trim();
-      const productLine = '{{ product.name|escapejs }}'
-        + (this.current ? ' (арт. ' + this.current.sku + ')' : '');
-      const prefill = 'Запрос цвета под покраску: «' + text + '».\nТовар: ' + productLine;
+      const prefill = 'Запрос цвета под покраску: «' + text + '».\nТовар: {{ product.name|escapejs }}'
+        + (this.selectionSummary ? ' (' + this.selectionSummary + ')' : '');
       this.customLastText = text;
       this.customSubmitted = true;
       this.customOpen = false;
@@ -663,146 +627,120 @@ function productVariants() {
       return 'background:' + bg + '; box-shadow: 0 0 0 2px var(--color-surface)' + ring;
     },
 
-    // Иерархия выбора: материал → марка → обработка → размер → длина.
-    // Опцию блокируют только выборы уровней ВЫШЕ неё; всё, что ниже,
-    // переподбирается при клике (_autoSelect). Иначе выбранная обработка/размер
-    // дизейблит марку, у которой этой обработки нет, — тупик.
-    isValid(field, value) {
-      const order = ['material_id', 'steel_grade_id', 'finish_id', 'size', 'length_m'];
-      const upper = order.slice(0, order.indexOf(field));
-      const s = this.sel;
-      return this.combinations.some(c =>
-        c[field] === value &&
-        upper.every(f => s[f] == null || c[f] === s[f])
-      );
+    // ── Подбор фото по правилам ──
+    // 1) отсеять правила, где заполненное условие противоречит выбору
+    //    (условие по не выбранному измерению — тоже противоречие);
+    // 2) из оставшихся — максимум совпавших условий;
+    // 3) тай-брейк: цвет (точный, потом группа) > обработка > материал.
+    get ruleImage() {
+      const selColorObj = this.colors.find(c => c.id === this.selColor) || null;
+      let best = null, bestScore = -1, bestWeight = -1;
+      for (const r of this.photoRules) {
+        let score = 0, weight = 0;
+        if (r.material_id != null) {
+          if (r.material_id !== this.sel.material_id) continue;
+          score++; weight += 1;
+        }
+        if (r.finish_id != null) {
+          if (r.finish_id !== this.sel.finish_id) continue;
+          score++; weight += 2;
+        }
+        if (r.color_id != null) {
+          if (!this.selColor || r.color_id !== this.selColor) continue;
+          score++; weight += 4;
+        }
+        if (r.color_group != null) {
+          if (!selColorObj || selColorObj.group !== r.color_group) continue;
+          score++; weight += 3;
+        }
+        if (score > bestScore || (score === bestScore && weight > bestWeight)) {
+          best = r; bestScore = score; bestWeight = weight;
+        }
+      }
+      return best ? best.urls : null;
     },
 
-    // ── Картинка, от точного к общему: обработка+цвет → обработка+группа →
-    // цвет → группа → обработка → выбранная миниатюра галереи.
-    // Возвращает объект {gallery, zoom} либо null.
     get currentImage() {
-      const f = this.sel.finish_id;
-      const keys = [];
-      if (this.selColor) {
-        const c = this.uniqueColors.find(x => x.id === this.selColor);
-        if (f)             keys.push('finish:' + f + '|color:' + this.selColor);
-        if (f && c && c.group) keys.push('finish:' + f + '|group:' + c.group);
-        keys.push('color:' + this.selColor);
-        if (c && c.group)  keys.push('group:' + c.group);
-      }
-      if (f) keys.push('finish:' + f);
-      for (const k of keys) {
-        const hit = this.colorImages[k];
-        if (hit && hit.gallery) return hit;
-      }
-      return this.images[this.activeIndex] || this.images[0] || null;
+      return this.ruleImage || this.images[this.activeIndex] || this.images[0] || null;
     },
-
     get displayImage() {
       const img = this.currentImage;
       return img ? img.gallery : null;
     },
-
     get displaySrcset() {
       const img = this.currentImage;
       if (!img) return '';
       const zoom = img.zoom || img.gallery;
       return img.gallery + ' 1000w, ' + zoom + ' 2000w';
     },
-
     get displayZoom() {
       const img = this.currentImage;
       return img ? (img.zoom || img.gallery) : null;
     },
 
-    get photoCaption() {
-      if (!this.current) return '';
-      const parts = [this.current.material_name];
-      if (this.current.steel_grade_name) parts.push(this.current.steel_grade_name);
-      if (this.current.finish_name) parts.push(this.current.finish_name);
-      if (this.selectedColorName)   parts.push(this.selectedColorName);
-      if (this.customSizeActive && this.customSize) parts.push(this.customSize);
-      else if (this.current.size)                   parts.push(this.current.size);
-      if (this.customLenActive && this.customLen) parts.push(this.customLen + ' м');
-      else if (this.current.length_m)             parts.push(this.current.length_m + ' м');
-      return parts.join(' · ');
-    },
-
+    // ── Подписи ──
     get selectedColorName() {
       if (this.customSubmitted && this.customLastText) return this.customLastText;
-      const c = this.uniqueColors.find(x => x.id === this.selColor);
+      const c = this.colors.find(x => x.id === this.selColor);
       return c ? c.name : '';
     },
 
-    get colorUiMode() {
-      if (this.sel.finish_id) {
-        const v = this.variants.find(v => v.finish_id === this.sel.finish_id);
-        if (v) return v.finish_color_ui || 'swatches';
+    get paramConfigs() {
+      return [
+        { kind: 'size',   title: 'Размер', unit: '',    customLabel: 'Свой размер',
+          placeholder: 'Например: 25×25',
+          values: this.params.size || [],   allowCustom: this.product.allow_custom_size },
+        { kind: 'length', title: 'Длина',  unit: ' м',  customLabel: 'Своя длина',
+          placeholder: 'Например: 2.7',
+          values: this.params.length || [], allowCustom: this.product.allow_custom_length },
+        { kind: 'height', title: 'Высота', unit: ' мм', customLabel: 'Своя высота',
+          placeholder: 'Например: 60',
+          values: this.params.height || [], allowCustom: this.product.allow_custom_height },
+      ];
+    },
+
+    paramLabel(param) {
+      if (this.customActive[param.kind]) {
+        const v = this.customValues[param.kind];
+        return v ? v + param.unit + ' (свой)' : 'свой';
       }
-      return this.current?.finish_color_ui || 'swatches';
+      const v = this.selParams[param.kind];
+      return v ? v + param.unit : '';
     },
 
-    get currentMaterialHasColors() {
-      // У какого-то варианта текущего материала с обработкой есть палитра:
-      // своей марки или фолбэк материала (цвет показывается только при обработке)
-      return this.variants.some(v =>
-        v.material_id === this.sel.material_id &&
-        v.finish_id &&
-        ((this.gradeColors[v.steel_grade_id] || []).length > 0 ||
-         (this.materialColors[v.material_id] || []).length > 0)
-      );
+    // Значение параметра для корзины/подписи (учитывает «свой …»)
+    _paramValue(kind, unit) {
+      if (this.customActive[kind]) {
+        const v = this.customValues[kind].trim();
+        return v ? v + unit + ' (свой)' : null;
+      }
+      return this.selParams[kind] ? this.selParams[kind] + unit : null;
     },
 
-    get uniqueSteelGrades() {
-      const seen = {};
-      return this.variants
-        .filter(v =>
-          v.steel_grade_id &&
-          (this.sel.material_id == null || v.material_id === this.sel.material_id) &&
-          !seen[v.steel_grade_id] && (seen[v.steel_grade_id] = true)
-        )
-        .map(v => ({ id: v.steel_grade_id, name: v.steel_grade_name }));
+    get selectionSummary() {
+      const parts = [];
+      if (this.currentMaterial) parts.push(this.currentMaterial.name);
+      if (this.currentGrade)    parts.push(this.currentGrade.name);
+      if (this.currentFinish)   parts.push(this.currentFinish.name);
+      if (this.selectedColorName) parts.push(this.selectedColorName);
+      const size = this._paramValue('size', '');
+      const len  = this._paramValue('length', ' м');
+      const h    = this._paramValue('height', ' мм');
+      if (size) parts.push(size);
+      if (len)  parts.push(len);
+      if (h)    parts.push(h);
+      return parts.join(' · ');
+    },
+    get photoCaption() {
+      return this.selectionSummary;
     },
 
-    get uniqueFinishes() {
-      const seen = {};
-      return this.variants
-        .filter(v =>
-          v.finish_id &&
-          (this.sel.material_id == null || v.material_id === this.sel.material_id) &&
-          !seen[v.finish_id] && (seen[v.finish_id] = true)
-        )
-        .map(v => ({ id: v.finish_id, name: v.finish_name, color_ui: v.finish_color_ui }));
-    },
-
-    get uniqueMaterials() {
-      const seen = {};
-      return this.variants
-        .filter(v => v.material_id && !seen[v.material_id] && (seen[v.material_id] = true))
-        .map(v => ({ id: v.material_id, name: v.material_name }));
-    },
-
-    // Палитра: марка стали (SteelGradeColor), фолбэк — материал (MaterialColor):
-    // для вариантов без марки (алюминий) и марок без своих цветов.
-    // Показывается только при выбранной обработке: цвет — результат обработки
-    get uniqueColors() {
-      if (!this.sel.finish_id) return [];
-      const byGrade = this.gradeColors[this.sel.steel_grade_id] || [];
-      if (byGrade.length) return byGrade;
-      return this.materialColors[this.sel.material_id] || [];
-    },
-
-    // Есть ли у товара своё фото под этот цвет (для текущей обработки)
-    _hasOwnPhoto(colorId) {
-      return !!(this.colorImages['finish:' + this.sel.finish_id + '|color:' + colorId]
-             || this.colorImages['color:' + colorId]);
-    },
-
-    // Быстрая пятёрка: первыми — цвета, под которые загружены фото товара;
-    // полная палитра («Показать всю») не меняется
+    // ── RAL-палитра ──
     get popularColors() {
-      const withPhoto = this.uniqueColors.filter(c => this._hasOwnPhoto(c.id));
-      const rest      = this.uniqueColors.filter(c => !this._hasOwnPhoto(c.id));
+      // Первыми — цвета, под которые у товара есть своё фото-правило
+      const hasPhoto = id => this.photoRules.some(r => r.color_id === id);
+      const withPhoto = this.colors.filter(c => hasPhoto(c.id));
+      const rest      = this.colors.filter(c => !hasPhoto(c.id));
       return withPhoto.concat(rest).slice(0, 5);
     },
 
@@ -812,7 +750,7 @@ function productVariants() {
         brown: 'Коричневые', blue: 'Синие', green: 'Зелёные',
         metallic: 'Металлик', other: 'Другие',
       };
-      const present = new Set(this.uniqueColors.map(c => c.group || 'other'));
+      const present = new Set(this.colors.map(c => c.group || 'other'));
       const order = ['white', 'gray', 'black', 'brown', 'blue', 'green', 'metallic', 'other'];
       const result = [{ key: 'all', label: 'Все' }];
       order.forEach(k => { if (present.has(k)) result.push({ key: k, label: labels[k] }); });
@@ -822,7 +760,7 @@ function productVariants() {
     get filteredColors() {
       const q   = this.ralSearch.trim().toLowerCase();
       const fam = this.ralFamily;
-      return this.uniqueColors.filter(c => {
+      return this.colors.filter(c => {
         if (fam !== 'all' && (c.group || 'other') !== fam) return false;
         if (q) {
           const inName = (c.name     || '').toLowerCase().includes(q);
@@ -833,74 +771,20 @@ function productVariants() {
       });
     },
 
-    get uniqueSizes() {
-      const seen = {};
-      return this.variants
-        .filter(v => v.size && !seen[v.size] && (seen[v.size] = true))
-        .map(v => v.size)
-        .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-    },
-
-    // «Свой размер» доступен, если у текущей комбинации есть вариант с флагом
-    get customSizeAvailable() {
-      const s = this.sel;
-      return this.variants.some(v =>
-        v.allow_custom_size &&
-        (s.material_id    == null || v.material_id    === s.material_id) &&
-        (s.steel_grade_id == null || v.steel_grade_id === s.steel_grade_id) &&
-        (s.finish_id      == null || v.finish_id      === s.finish_id)
-      );
-    },
-
-    get sizeLabel() {
-      if (this.customSizeActive) {
-        return this.customSize ? this.customSize + ' (свой)' : 'свой';
-      }
-      return this.current && this.current.size ? this.current.size : '';
-    },
-
-    get uniqueLengths() {
-      const seen = {};
-      return this.variants
-        .filter(v => v.length_m && !seen[v.length_m] && (seen[v.length_m] = true))
-        .map(v => v.length_m)
-        .sort((a, b) => parseFloat(a) - parseFloat(b));
-    },
-
-    // «Своя длина» доступна, если у текущей комбинации есть вариант с флагом
-    get customLengthAvailable() {
-      const s = this.sel;
-      return this.variants.some(v =>
-        v.allow_custom_length &&
-        (s.material_id    == null || v.material_id    === s.material_id) &&
-        (s.steel_grade_id == null || v.steel_grade_id === s.steel_grade_id) &&
-        (s.finish_id      == null || v.finish_id      === s.finish_id)
-      );
-    },
-
-    get lengthLabel() {
-      if (this.customLenActive) {
-        return this.customLen ? this.customLen + ' м (своя)' : 'своя';
-      }
-      return this.current && this.current.length_m ? this.current.length_m + ' м' : '';
-    },
-
     addCurrentToCart() {
-      if (!this.current) return;
-      const v = this.current;
-      const ci = this.currentImage; // фото товара {thumb,...} или цветовое {card,...}
+      const ci = this.currentImage;
       const item = {
-        name:   '{{ product.name|escapejs }}',
-        slug:   '{{ product.slug }}',
-        sku:    v.sku,
-        qty:    1,
-        unit:   v.unit_display,
-        image:  ci ? (ci.thumb || ci.card) : null,
-        color:  this.selectedColorName || null,
-        size:   (this.customSizeActive && this.customSize)
-                  ? this.customSize : null,
-        length: (this.customLenActive && this.customLen)
-                  ? this.customLen + ' м' : null,
+        name:  '{{ product.name|escapejs }}',
+        slug:  '{{ product.slug }}',
+        qty:   1,
+        image: ci ? (ci.thumb || ci.card || ci.gallery) : null,
+        material:    this.currentMaterial ? this.currentMaterial.name : null,
+        steel_grade: this.currentGrade    ? this.currentGrade.name    : null,
+        finish:      this.currentFinish   ? this.currentFinish.name   : null,
+        color:       this.selectedColorName || null,
+        size:        this._paramValue('size', ''),
+        length:      this._paramValue('length', ' м'),
+        height:      this._paramValue('height', ' мм'),
       };
       if (this.customSubmitted && this.customLastText) {
         item.color = null;

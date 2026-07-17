@@ -8,9 +8,11 @@ from django.urls import reverse
 from django.utils.html import strip_tags
 from django.utils.text import Truncator
 
-from apps.references.models import MaterialColor, SteelGradeColor, Material, SteelGrade, Finish
+from apps.references.models import Material, SteelGrade, Finish
 from .filters import ProductFilter
-from .models import Category, CategoryFacet, Product, ProductVariant
+from .models import (
+    Category, CategoryFacet, Product, ProductOptionNode, ProductParamValue,
+)
 
 PAGE_SIZE = 9
 SORT_MAP = {
@@ -40,19 +42,16 @@ def _facet_config(category):
     return [(k, '') for k in DEFAULT_FACET_KEYS]
 
 
-def _trim_length(value):
-    s = str(value).rstrip('0').rstrip('.')
-    return f'{s} м'
-
-
 def _facet_ctx(request, category=None):
     """Фасеты сайдбара: состав и порядок — из настройки раздела (CategoryFacet),
-    значения — автоматически из активных вариантов товаров раздела.
+    значения — автоматически из дерева опций и параметров товаров раздела.
     Фасет без значений скрывается."""
-    variant_qs = ProductVariant.objects.filter(is_active=True, product__is_active=True)
+    node_qs = ProductOptionNode.objects.filter(product__is_active=True)
+    param_qs = ProductParamValue.objects.filter(product__is_active=True)
     if category:
         cat_ids = [c.pk for c in category.get_descendants(include_self=True)]
-        variant_qs = variant_qs.filter(product__category_id__in=cat_ids)
+        node_qs = node_qs.filter(product__category_id__in=cat_ids)
+        param_qs = param_qs.filter(product__category_id__in=cat_ids)
 
     titles = dict(CategoryFacet.FACET_CHOICES)
     facets = []
@@ -60,22 +59,25 @@ def _facet_ctx(request, category=None):
         options = []
         if key == 'material':
             options = Material.objects.filter(
-                is_active=True, pk__in=variant_qs.values('material_id'))
+                is_active=True, pk__in=node_qs.values('material_id'))
         elif key == 'steel_grade':
             options = SteelGrade.objects.filter(
-                is_active=True, pk__in=variant_qs.values('steel_grade_id'))
+                is_active=True, pk__in=node_qs.values('steel_grade_id'))
         elif key == 'finish':
             options = Finish.objects.filter(
-                is_active=True, pk__in=variant_qs.values('finish_id'))
+                is_active=True, pk__in=node_qs.values('finish_id'))
         elif key == 'size':
-            values = variant_qs.exclude(size='').values_list('size', flat=True).distinct()
+            values = param_qs.filter(kind='size').values_list('value', flat=True).distinct()
             options = [
                 {'pk': s, 'name': s}
                 for s in sorted(values, key=lambda s: (len(s), s))
             ]
         elif key == 'length':
-            values = variant_qs.exclude(length_m=None).values_list('length_m', flat=True).distinct()
-            options = [{'pk': str(l), 'name': _trim_length(l)} for l in sorted(values)]
+            values = param_qs.filter(kind='length').values_list('value', flat=True).distinct()
+            options = [
+                {'pk': v, 'name': f'{v} м'}
+                for v in sorted(values, key=lambda v: (len(v), v))
+            ]
 
         if key != 'in_stock' and not options:
             continue  # в разделе нет значений — фасет не показываем
@@ -98,7 +100,7 @@ def search_view(request):
             Q(name__icontains=q) |
             Q(profile_code__icontains=q) |
             Q(category__name__icontains=q) |
-            Q(variants__material__name__icontains=q)
+            Q(option_nodes__material__name__icontains=q)
         )
 
     filterset = ProductFilter(request.GET, queryset=qs)
@@ -256,22 +258,111 @@ def _schema_org(request, product, images):
     return data.replace('<', '\\u003C')
 
 
-def _product_detail(request, product):
-    variants_qs = (
-        product.variants
-        .filter(is_active=True)
+def _color_dict(c):
+    return {
+        'id':       c.id,
+        'name':     c.name,
+        'hex':      c.hex_code,
+        'ral_code': c.ral_code,
+        'group':    c.color_group,
+    }
+
+
+def _option_tree(product):
+    """Дерево опций для Alpine: материалы → марки → обработки (+ цвета листа).
+
+    Обработка может висеть и прямо под материалом (материал без марок).
+    Неактивные справочные записи скрываются вместе с поддеревом.
+    """
+    nodes = list(
+        product.option_nodes
         .select_related('material', 'steel_grade', 'finish')
-        .order_by('sku')
+        .prefetch_related('colors')
+        .order_by('sort_order', 'id')
     )
-    # Миниатюры: обычные фото галереи; если менеджер загрузил только фото,
-    # привязанные к обработке/цвету, — показываем их, чтобы карточка
-    # не оставалась без фото до выбора нужной комбинации
+    by_parent = {}
+    for n in nodes:
+        by_parent.setdefault(n.parent_id, []).append(n)
+
+    def finish_dict(node):
+        colors = [
+            _color_dict(c) for c in node.colors.all() if c.is_active
+        ]
+        colors.sort(key=lambda c: (c['group'], c['name']))
+        return {
+            'id':       node.id,
+            'finish_id': node.finish_id,
+            'name':     node.finish.name,
+            'color_ui': node.finish.color_ui,
+            'colors':   colors,
+        }
+
+    tree = []
+    for m_node in by_parent.get(None, []):
+        if m_node.node_type != 'material' or not m_node.material.is_active:
+            continue
+        entry = {
+            'id':          m_node.id,
+            'material_id': m_node.material_id,
+            'name':        m_node.material.name,
+            'grades':      [],
+            'finishes':    [],
+        }
+        for child in by_parent.get(m_node.id, []):
+            if child.node_type == 'steel_grade' and child.steel_grade.is_active:
+                grade = {
+                    'id':       child.id,
+                    'grade_id': child.steel_grade_id,
+                    'name':     child.steel_grade.name,
+                    'finishes': [
+                        finish_dict(f) for f in by_parent.get(child.id, [])
+                        if f.node_type == 'finish' and f.finish.is_active
+                    ],
+                }
+                entry['grades'].append(grade)
+            elif child.node_type == 'finish' and child.finish.is_active:
+                entry['finishes'].append(finish_dict(child))
+        tree.append(entry)
+    return tree
+
+
+def _photo_rules(product):
+    """Фото-правила для клиентского подбора: условия + URL пресетов."""
+    rules = []
+    qs = (
+        product.images.overrides()
+        .select_related('color')
+        .order_by('sort_order')
+    )
+    for img in qs:
+        try:
+            urls = {
+                'thumb':   img.thumb.url,
+                'card':    img.card.url,
+                'gallery': img.gallery.url,
+                'zoom':    img.zoom.url,
+            }
+        except Exception:
+            continue  # исходный файл недоступен — правило пропускаем
+        rules.append({
+            'material_id': img.material_id,
+            'finish_id':   img.finish_id,
+            'color_id':    img.color_id,
+            'color_group': img.color_group or None,
+            'urls':        urls,
+        })
+    return rules
+
+
+def _product_detail(request, product):
+    # Миниатюры: обычные фото галереи; если менеджер загрузил только
+    # фото-правила — показываем их, чтобы карточка не оставалась без фото
     images = list(product.images.gallery().order_by('sort_order'))
     if not images:
         images = list(product.images.overrides().order_by('sort_order'))
 
     # Данные изображений для Alpine (смена фото, srcset, лайтбокс).
-    # gallery/zoom вписывают предмет целиком (ResizeToFit), без обрезки.
+    # gallery/zoom вписывают предмет целиком (ResizeToFit), без обрезки
     images_data = []
     for img in images:
         try:
@@ -283,121 +374,27 @@ def _product_detail(request, product):
         except Exception:
             continue  # исходный файл недоступен — пропускаем
 
-    variants_data = []
-    for v in variants_qs:
-        variants_data.append({
-            'id':               v.id,
-            'sku':              v.sku,
-            'material_id':      v.material_id,
-            'material_name':    v.material.name,
-            'steel_grade_id':   v.steel_grade_id,
-            'steel_grade_name': v.steel_grade.name if v.steel_grade else None,
-            'finish_id':        v.finish_id,
-            'finish_name':      v.finish.name      if v.finish else None,
-            'finish_color_ui':  v.finish.color_ui  if v.finish else 'swatches',
-            'size':             v.size or None,
-            'allow_custom_size': v.allow_custom_size,
-            'height_mm':        str(v.height_mm) if v.height_mm else None,
-            'length_m':         str(v.length_m)  if v.length_m  else None,
-            'allow_custom_length': v.allow_custom_length,
-            'unit':             v.unit,
-            'unit_display':     v.get_unit_display(),
-            'in_stock':         v.in_stock,
-            'in_stock_display': v.get_in_stock_display(),
-        })
+    params = {'size': [], 'length': [], 'height': []}
+    for pv in product.param_values.all():
+        params.setdefault(pv.kind, []).append(pv.value)
 
-    combinations = [
-        {
-            'material_id':    v['material_id'],
-            'steel_grade_id': v['steel_grade_id'],
-            'finish_id':      v['finish_id'],
-            'size':           v['size'],
-            'length_m':       v['length_m'],
-        }
-        for v in variants_data
-    ]
-
-    # Палитры: цвета марок (SteelGradeColor) + фолбэк-палитры материалов
-    # (MaterialColor) — для вариантов без марки или марок без своих цветов.
-    # Интерфейс выбора (свотчи/RAL/свой) определяет обработка (finish_color_ui)
-    def _color_dict(c):
-        return {
-            'id':       c.id,
-            'name':     c.name,
-            'hex':      c.hex_code,
-            'ral_code': c.ral_code,
-            'group':    c.color_group,
-        }
-
-    grade_ids = {v['steel_grade_id'] for v in variants_data if v['steel_grade_id']}
-    grade_colors = {}
-    if grade_ids:
-        gc_qs = (
-            SteelGradeColor.objects
-            .filter(steel_grade_id__in=grade_ids, color__is_active=True)
-            .select_related('color')
-            .order_by('color__color_group', 'color__name')
-        )
-        for gc in gc_qs:
-            grade_colors.setdefault(gc.steel_grade_id, []).append(_color_dict(gc.color))
-
-    material_ids = {v['material_id'] for v in variants_data if v['material_id']}
-    material_colors = {}
-    if material_ids:
-        mc_qs = (
-            MaterialColor.objects
-            .filter(material_id__in=material_ids, color__is_active=True)
-            .select_related('color')
-            .order_by('color__color_group', 'color__name')
-        )
-        for mc in mc_qs:
-            material_colors.setdefault(mc.material_id, []).append(_color_dict(mc.color))
-
-    # Карта «обработка/цвет → фото». Ключи (клиент перебирает от точного
-    # к общему: обработка+цвет → обработка+группа → цвет → группа → обработка):
-    #   finish:<fid>|color:<cid> / finish:<fid>|group:<g> /
-    #   color:<cid> / group:<g> / finish:<fid>
-    color_images = {}
-    finish_fallbacks = {}  # первое фото каждой обработки — показ, пока цвет не выбран
-    for ci in product.images.overrides().order_by('sort_order').select_related('color'):
-        try:
-            urls = {
-                'thumb':   ci.thumb.url,
-                'card':    ci.card.url,
-                'gallery': ci.gallery.url,
-                'zoom':    ci.zoom.url,
-            }
-        except Exception:
-            continue
-        if ci.color_id:
-            suffix = f'color:{ci.color_id}'
-        elif ci.color_group:
-            suffix = f'group:{ci.color_group}'
-        else:
-            suffix = ''
-        if ci.finish_id and suffix:
-            key = f'finish:{ci.finish_id}|{suffix}'
-        elif ci.finish_id:
-            key = f'finish:{ci.finish_id}'
-        else:
-            key = suffix
-        color_images[key] = urls
-        if ci.finish_id:
-            finish_fallbacks.setdefault(ci.finish_id, urls)
-
-    # Если у обработки нет своего фото «без цвета» — фоллбэком служит
-    # её первое фото (setdefault не перетирает явный ключ finish:<id>)
-    for fid, urls in finish_fallbacks.items():
-        color_images.setdefault(f'finish:{fid}', urls)
+    product_json = {
+        'name':             product.name,
+        'slug':             product.slug,
+        'in_stock':         product.in_stock,
+        'in_stock_display': product.get_in_stock_display(),
+        'allow_custom_size':   product.allow_custom_size,
+        'allow_custom_length': product.allow_custom_length,
+        'allow_custom_height': product.allow_custom_height,
+    }
 
     return render(request, 'catalog/product_detail.html', {
-        'product':            product,
-        'images':             images,
-        'images_json':        images_data,
-        'variants_json':      variants_data,
-        'combinations_json':  combinations,
-        'grade_colors_json':  grade_colors,
-        'material_colors_json': material_colors,
-        'color_images_json':  color_images,
-        'schema_org':         _schema_org(request, product, images),
+        'product':           product,
+        'images':            images,
+        'images_json':       images_data,
+        'product_json':      product_json,
+        'tree_json':         _option_tree(product),
+        'params_json':       params,
+        'photo_rules_json':  _photo_rules(product),
+        'schema_org':        _schema_org(request, product, images),
     })

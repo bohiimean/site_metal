@@ -10,431 +10,243 @@
         integrity="sha384-9Ax3MmS9AClxJyd5/zafcXXjxmwFhZCdsT6HJoJjarvCaAkJlk5QDzjLJm+Wdx5F"
         crossorigin="anonymous"></script>
 <style>
-  .gen-card {
+  .opt-card {
     background: var(--body-bg, #fff);
     border: 1px solid var(--border-color, #ccc);
     border-radius: 4px;
     padding: 16px 20px;
     margin-bottom: 12px;
   }
-  .gen-row-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 14px;
-    font-weight: 600;
-    font-size: 13px;
+  .opt-title { font-weight: 600; font-size: 13px; margin: 0 0 4px; }
+  .opt-hint  { font-size: 12px; color: #888; margin: 0 0 14px; }
+  .opt-check {
+    display: inline-flex; align-items: center; gap: 7px;
+    font-size: 13px; cursor: pointer; user-select: none;
   }
-  .gen-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: 12px;
-    margin-bottom: 14px;
-  }
-  .gen-field label {
-    display: block;
-    font-size: 11px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: .05em;
-    color: #888;
-    margin-bottom: 4px;
-  }
-  .gen-field select,
-  .gen-field input[type=text],
-  .gen-field input[type=number] {
-    width: 100%;
-    padding: 6px 8px;
-    font-size: 13px;
-    border: 1px solid var(--border-color, #ccc);
-    border-radius: 3px;
-    box-sizing: border-box;
-  }
-  .gen-lengths { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-  .gen-checks { display: flex; flex-wrap: wrap; gap: 6px 18px; }
-  .gen-check-item {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 12.5px;
-    cursor: pointer;
-  }
-  .gen-check-item input { margin: 0; cursor: pointer; }
-  .gen-no-opts { font-size: 12px; color: #aaa; font-style: italic; margin: 0; }
-  .gen-length-input { width: 70px !important; }
-  .gen-btn-sm { padding: 3px 8px; font-size: 12px; cursor: pointer; }
-  .gen-result {
-    margin-top: 16px;
-    padding: 12px 16px;
-    border: 1px solid var(--border-color, #ccc);
-    border-radius: 4px;
-    background: #f9f9f9;
-  }
-  .gen-result-ok  { color: #2e7d32; }
-  .gen-result-err { color: #c62828; }
-  .gen-result-sku { font-family: monospace; font-size: 11px; color: #555; margin-left: 16px; }
-  .gen-hint { font-size: 12px; color: #888; margin: 0 0 14px; }
+  .opt-check input { margin: 0; cursor: pointer; }
+  .opt-material { border: 1px solid var(--border-color, #ddd); border-radius: 4px;
+                  padding: 12px 16px; margin-bottom: 10px; }
+  .opt-material > .opt-check { font-weight: 600; }
+  .opt-branch { margin: 10px 0 0 24px; padding-left: 14px;
+                border-left: 2px solid var(--border-color, #e5e5e5); }
+  .opt-label { font-size: 11px; font-weight: 600; text-transform: uppercase;
+               letter-spacing: .05em; color: #888; margin: 0 0 6px; }
+  .opt-finish-row { margin: 6px 0; }
+  .opt-colors { margin: 8px 0 4px 24px; padding: 10px 12px;
+                background: rgba(0,0,0,.025); border-radius: 4px; }
+  .opt-color-group { min-width: 140px; }
+  .opt-color-item { display: flex; align-items: center; gap: 6px;
+                    font-size: 12px; cursor: pointer; margin: 3px 0; }
+  .opt-color-item input { margin: 0; cursor: pointer; }
+  .opt-swatch { width: 13px; height: 13px; border-radius: 50%; flex-shrink: 0;
+                border: 1px solid rgba(0,0,0,.15); display: inline-block; }
+  .opt-btn-sm { border: 0; padding: 0; background: none; color: #4f8ef7;
+                font-size: 11px; cursor: pointer; }
+  .opt-count { font-size: 11px; color: #888; font-weight: 400; }
 </style>
 {% endif %}
 {% endblock %}
 
-{% block object-tools-items %}
-{{ block.super }}
-{% endblock %}
-
 {% block after_related_objects %}
 {{ block.super }}
-{% if not original %}
-<div class="module" style="margin-top: 24px; padding: 12px 16px;">
-  <p style="margin: 0; color: #888; font-size: 12px;">
-    ⚡ Генератор вариантов появится после первого сохранения товара
-    (нажмите «Сохранить и продолжить редактирование»).
-  </p>
-</div>
-{% endif %}
 {% if original %}
-<div style="margin-top: 24px;">
+<div class="opt-card" x-data="optionsTree()" x-init="init()">
+  <p class="opt-title">Дерево опций: материал → марка → обработка → цвета</p>
+  <p class="opt-hint">
+    Отметьте доступные ветки. Дерево задаёт разрешённые сочетания: не отмечено —
+    покупатель выбрать не сможет. Цвета отмечаются на каждой обработке отдельно
+    (у «Полировки» под 304 и под 430 — свои наборы). Сохраняется вместе с формой
+    товара — кнопкой «Сохранить» внизу.
+  </p>
 
-  {# ── Шапка: счётчик + ссылка на список ── #}
-  <div class="module" style="padding: 0; overflow: hidden; margin-bottom: 12px;">
-    <h2 style="margin: 0; padding: 9px 14px; font-size: 13px;
-               display: flex; align-items: center; justify-content: space-between;">
-      <span>
-        Варианты товара
-        <span style="font-weight: normal; color: #888; margin-left: 6px;">{{ variants_count }} шт.</span>
-      </span>
-      <a href="{% url 'admin:catalog_productvariant_changelist' %}?product__id={{ original.pk }}"
-         class="button" style="font-size: 11px; padding: 4px 10px; margin: 0;">
-        Открыть список &rarr;
-      </a>
-    </h2>
-  </div>
+  <input type="hidden" name="options_tree" :value="JSON.stringify(state)">
 
-  {# ── Генератор вариантов ── #}
-  <div class="module" style="padding: 0; overflow: hidden;">
-    <h2 style="margin: 0; padding: 9px 14px; font-size: 13px;">⚡ Генератор вариантов</h2>
-    <div style="padding: 14px 16px;">
-      <p class="gen-hint">
-        Вариант = материал × марка × обработка × размеры × длины.
-        Цвет вариантом не является — палитра задаётся в карточке марки стали
-        («Доступные цвета»; для вариантов без марки — в карточке материала),
-        фото под цвет — в блоке изображений выше.
-      </p>
-      <div x-data="variantGenerator('{% url "admin:catalog_product_generate_variants" original.pk %}')"
-           x-init="init()">
+  <template x-for="mat in dicts.materials" :key="mat.id">
+    <div class="opt-material">
+      <label class="opt-check">
+        <input type="checkbox" :checked="!!matEntry(mat.id)" @change="toggleMaterial(mat.id)">
+        <span x-text="mat.name"></span>
+      </label>
 
-        {# СТРОКИ #}
-        <template x-for="(row, idx) in rows" :key="idx">
-          <div class="gen-card">
-
-            <div class="gen-row-header">
-              <span x-text="'Строка ' + (idx + 1)"></span>
-              <button type="button" class="button gen-btn-sm"
-                      style="background:#e53935;border-color:#e53935;"
-                      x-show="rows.length > 1"
-                      @click="removeRow(idx)">✕ Удалить</button>
-            </div>
-
-            {# Материал #}
-            <div class="gen-grid">
-              <div class="gen-field">
-                <label>Материал *</label>
-                <select x-model="row.material_id" @change="onMaterialChange(row)">
-                  <option value="">— выберите —</option>
-                  {% for m in gen_materials %}
-                    <option value="{{ m.pk }}">{{ m.name }}</option>
-                  {% endfor %}
-                </select>
-              </div>
-            </div>
-
-            {# Марки стали — чекбоксы (комбинируются между собой) #}
-            <div class="gen-field" style="margin-bottom:14px;">
-              <label>Марки стали <span style="font-weight:400;text-transform:none;">(можно несколько — на каждую будет свой вариант)</span></label>
-              <template x-if="!row.material_id">
-                <p class="gen-no-opts">Сначала выберите материал</p>
-              </template>
-              <template x-if="row.material_id && !row.steel_grades.length">
-                <p class="gen-no-opts">У материала нет марок — варианты будут без марки</p>
-              </template>
-              <template x-if="row.steel_grades.length">
-                <div class="gen-checks">
-                  <template x-for="g in row.steel_grades" :key="g.id">
-                    <label class="gen-check-item">
-                      <input type="checkbox"
-                             :checked="row.steel_grade_ids.includes(g.id)"
-                             @change="toggleIn(row.steel_grade_ids, g.id)">
-                      <span x-text="g.name"></span>
-                    </label>
+      <template x-if="matEntry(mat.id)">
+        <div>
+          <!-- Марки материала -->
+          <template x-if="mat.grades.length">
+            <div class="opt-branch">
+              <p class="opt-label">Марки</p>
+              <template x-for="gr in mat.grades" :key="gr.id">
+                <div class="opt-finish-row">
+                  <label class="opt-check">
+                    <input type="checkbox" :checked="!!gradeEntry(mat.id, gr.id)"
+                           @change="toggleGrade(mat.id, gr.id)">
+                    <span x-text="gr.name"></span>
+                  </label>
+                  <!-- Обработки марки -->
+                  <template x-if="gradeEntry(mat.id, gr.id)">
+                    <div class="opt-branch">
+                      <p class="opt-label">Обработки</p>
+                      <template x-for="fin in dicts.finishes" :key="fin.id">
+                        <div class="opt-finish-row">
+                          <label class="opt-check">
+                            <input type="checkbox"
+                                   :checked="!!finishEntry(gradeEntry(mat.id, gr.id), fin.id)"
+                                   @change="toggleFinish(gradeEntry(mat.id, gr.id), fin.id)">
+                            <span x-text="fin.name"></span>
+                            <span class="opt-count"
+                                  x-show="finishEntry(gradeEntry(mat.id, gr.id), fin.id)"
+                                  x-text="'· цветов: ' + colorCount(gradeEntry(mat.id, gr.id), fin.id)"></span>
+                          </label>
+                          <template x-if="finishEntry(gradeEntry(mat.id, gr.id), fin.id)">
+                            <div class="opt-colors">
+                              <div style="display:flex;gap:10px;margin-bottom:6px;">
+                                <button type="button" class="opt-btn-sm"
+                                        @click="setAllColors(finishEntry(gradeEntry(mat.id, gr.id), fin.id), true)">Выбрать все цвета</button>
+                                <button type="button" class="opt-btn-sm"
+                                        @click="setAllColors(finishEntry(gradeEntry(mat.id, gr.id), fin.id), false)">Снять все</button>
+                              </div>
+                              <div style="display:flex;flex-wrap:wrap;gap:8px 24px;">
+                                <template x-for="grp in colorGroups" :key="grp.label">
+                                  <div class="opt-color-group">
+                                    <p class="opt-label" x-text="grp.label"></p>
+                                    <template x-for="c in grp.colors" :key="c.id">
+                                      <label class="opt-color-item">
+                                        <input type="checkbox"
+                                               :checked="finishEntry(gradeEntry(mat.id, gr.id), fin.id).color_ids.includes(c.id)"
+                                               @change="toggleColor(finishEntry(gradeEntry(mat.id, gr.id), fin.id), c.id)">
+                                        <span class="opt-swatch" :style="'background:' + (c.hex || '#ccc')"></span>
+                                        <span x-text="c.name + (c.ral ? ' (' + c.ral + ')' : '')"></span>
+                                      </label>
+                                    </template>
+                                  </div>
+                                </template>
+                              </div>
+                            </div>
+                          </template>
+                        </div>
+                      </template>
+                    </div>
                   </template>
                 </div>
               </template>
             </div>
+          </template>
 
-            {# Обработки — чекбоксы, включая «без обработки» #}
-            <div class="gen-field" style="margin-bottom:14px;">
-              <label>Обработки <span style="font-weight:400;text-transform:none;">(можно несколько — на каждую будет свой вариант)</span></label>
-              <div class="gen-checks">
-                <label class="gen-check-item">
-                  <input type="checkbox"
-                         :checked="row.finish_ids.includes('none')"
-                         @change="toggleIn(row.finish_ids, 'none')">
-                  <span style="font-style:italic;">Без обработки</span>
-                </label>
-                {% for f in gen_finishes %}
-                  <label class="gen-check-item">
+          <!-- Обработки прямо под материалом (материалы без марок — латунь и т.п.) -->
+          <template x-if="!mat.grades.length || matEntry(mat.id).finishes.length">
+            <div class="opt-branch">
+              <p class="opt-label">Обработки (без марки)</p>
+              <template x-for="fin in dicts.finishes" :key="fin.id">
+                <div class="opt-finish-row">
+                  <label class="opt-check">
                     <input type="checkbox"
-                           :checked="row.finish_ids.includes('{{ f.pk }}')"
-                           @change="toggleIn(row.finish_ids, '{{ f.pk }}')">
-                    <span>{{ f.name }}</span>
+                           :checked="!!finishEntry(matEntry(mat.id), fin.id)"
+                           @change="toggleFinish(matEntry(mat.id), fin.id)">
+                    <span x-text="fin.name"></span>
+                    <span class="opt-count"
+                          x-show="finishEntry(matEntry(mat.id), fin.id)"
+                          x-text="'· цветов: ' + colorCount(matEntry(mat.id), fin.id)"></span>
                   </label>
-                {% endfor %}
-              </div>
+                  <template x-if="finishEntry(matEntry(mat.id), fin.id)">
+                    <div class="opt-colors">
+                      <div style="display:flex;gap:10px;margin-bottom:6px;">
+                        <button type="button" class="opt-btn-sm"
+                                @click="setAllColors(finishEntry(matEntry(mat.id), fin.id), true)">Выбрать все цвета</button>
+                        <button type="button" class="opt-btn-sm"
+                                @click="setAllColors(finishEntry(matEntry(mat.id), fin.id), false)">Снять все</button>
+                      </div>
+                      <div style="display:flex;flex-wrap:wrap;gap:8px 24px;">
+                        <template x-for="grp in colorGroups" :key="grp.label">
+                          <div class="opt-color-group">
+                            <p class="opt-label" x-text="grp.label"></p>
+                            <template x-for="c in grp.colors" :key="c.id">
+                              <label class="opt-color-item">
+                                <input type="checkbox"
+                                       :checked="finishEntry(matEntry(mat.id), fin.id).color_ids.includes(c.id)"
+                                       @change="toggleColor(finishEntry(matEntry(mat.id), fin.id), c.id)">
+                                <span class="opt-swatch" :style="'background:' + (c.hex || '#ccc')"></span>
+                                <span x-text="c.name + (c.ral ? ' (' + c.ral + ')' : '')"></span>
+                              </label>
+                            </template>
+                          </div>
+                        </template>
+                      </div>
+                    </div>
+                  </template>
+                </div>
+              </template>
             </div>
-
-            {# Размеры #}
-            <div class="gen-field" style="margin-bottom:14px;">
-              <label>
-                Размеры
-                <span style="font-weight:400;text-transform:none;">
-                  (например 6×6, 10×10 — на каждый будет свой вариант; пусто — без размера)
-                </span>
-              </label>
-              <div class="gen-lengths">
-                <template x-for="(sz, si) in row.sizes" :key="si">
-                  <div style="display:flex;align-items:center;gap:4px;">
-                    <input type="text"
-                           class="gen-length-input" style="width:90px !important;"
-                           placeholder="6×6"
-                           :value="sz"
-                           @input="row.sizes[si] = $event.target.value">
-                    <button type="button" class="button gen-btn-sm"
-                            style="background:#888;border-color:#888;"
-                            @click="removeSize(row, si)">✕</button>
-                  </div>
-                </template>
-                <button type="button" class="button gen-btn-sm"
-                        @click="addSize(row)">+ Размер</button>
-                <label class="gen-check-item" style="margin-left:12px;">
-                  <input type="checkbox" x-model="row.custom_size">
-                  <span>Свой размер
-                    <span style="font-weight:400;color:#888;">(на карточке появится поле — клиент укажет свой размер)</span>
-                  </span>
-                </label>
-              </div>
-            </div>
-
-            {# Длины #}
-            <div class="gen-field" style="margin-bottom:14px;">
-              <label>
-                Длины, м
-                <span style="font-weight:400;text-transform:none;">
-                  (оставьте пустым для штучных/листовых)
-                </span>
-              </label>
-              <div class="gen-lengths">
-                <template x-for="(len, li) in row.lengths" :key="li">
-                  <div style="display:flex;align-items:center;gap:4px;">
-                    <input type="number" step="0.1" min="0.1"
-                           class="gen-length-input"
-                           :value="len"
-                           @input="row.lengths[li] = $event.target.value">
-                    <button type="button" class="button gen-btn-sm"
-                            style="background:#888;border-color:#888;"
-                            x-show="row.lengths.length > 1"
-                            @click="removeLength(row, li)">✕</button>
-                  </div>
-                </template>
-                <button type="button" class="button gen-btn-sm"
-                        @click="addLength(row)">+ Длина</button>
-                <button type="button" class="button gen-btn-sm"
-                        style="background:#888;border-color:#888;"
-                        x-show="row.lengths.length > 0"
-                        @click="row.lengths = []"
-                        title="Убрать все длины (для штучных/листовых)">× Без длины</button>
-                <label class="gen-check-item" style="margin-left:12px;">
-                  <input type="checkbox" x-model="row.custom_length">
-                  <span>Своя длина
-                    <span style="font-weight:400;color:#888;">(на карточке появится поле — клиент укажет свою длину)</span>
-                  </span>
-                </label>
-              </div>
-            </div>
-
-            {# Единица / Наличие / Высота / SKU-префикс #}
-            <div class="gen-grid">
-              <div class="gen-field">
-                <label>Единица измерения</label>
-                <select x-model="row.unit">
-                  {% for val, label in gen_unit_choices %}
-                    <option value="{{ val }}">{{ label }}</option>
-                  {% endfor %}
-                </select>
-              </div>
-              <div class="gen-field">
-                <label>Наличие</label>
-                <select x-model="row.in_stock">
-                  {% for val, label in gen_stock_choices %}
-                    <option value="{{ val }}">{{ label }}</option>
-                  {% endfor %}
-                </select>
-              </div>
-              <div class="gen-field">
-                <label>Высота, мм</label>
-                <input type="number" step="0.1" min="0" x-model="row.height_mm"
-                       placeholder="необязательно">
-              </div>
-              <div class="gen-field" style="grid-column:span 3;">
-                <label>
-                  SKU-префикс
-                  <span style="font-weight:400;text-transform:none;">
-                    (необязательно — иначе генерируется авто)
-                  </span>
-                </label>
-                <input type="text" x-model="row.sku_prefix"
-                       placeholder="напр. GR30-NZH или оставьте пустым">
-              </div>
-            </div>
-
-          </div>
-        </template>
-
-        {# Управление строками #}
-        <div style="margin-bottom:20px;display:flex;gap:10px;">
-          <button type="button" class="button" @click="addRow()">+ Добавить строку</button>
+          </template>
         </div>
-
-        {# Кнопка генерации #}
-        <div>
-          <button type="button" class="button default"
-                  style="font-size:14px;padding:10px 28px;"
-                  :disabled="loading"
-                  @click="generate()">
-            <span x-show="!loading">⚡ Сгенерировать варианты</span>
-            <span x-show="loading">Создаю…</span>
-          </button>
-        </div>
-
-        {# Результат #}
-        <template x-if="results">
-          <div class="gen-result">
-            <p class="gen-result-ok"
-               style="font-size:14px;font-weight:600;margin-bottom:8px;"
-               x-show="results.created > 0"
-               x-text="'✓ Создано вариантов: ' + results.created"></p>
-            <p style="color:#555;margin-bottom:8px;"
-               x-show="results.skipped > 0"
-               x-text="'Пропущено (уже существуют или ошибка): ' + results.skipped"></p>
-
-            <template x-if="results.created_list && results.created_list.length">
-              <details style="margin-top:8px;">
-                <summary style="cursor:pointer;font-size:12px;color:#555;">Созданные SKU</summary>
-                <template x-for="sku in results.created_list" :key="sku">
-                  <div class="gen-result-sku" x-text="sku"></div>
-                </template>
-              </details>
-            </template>
-
-            <template x-if="results.errors && results.errors.length">
-              <div style="margin-top:10px;">
-                <p class="gen-result-err" style="font-weight:600;">Ошибки:</p>
-                <template x-for="err in results.errors" :key="err">
-                  <p class="gen-result-err"
-                     style="font-size:12px;margin-left:12px;"
-                     x-text="err"></p>
-                </template>
-              </div>
-            </template>
-
-            <template x-if="results.created > 0">
-              <div style="margin-top:14px;">
-                <a href="{% url 'admin:catalog_productvariant_changelist' %}?product__id={{ original.pk }}"
-                   class="button default">Открыть список вариантов &rarr;</a>
-              </div>
-            </template>
-          </div>
-        </template>
-
-      </div>
+      </template>
     </div>
-  </div>
-
+  </template>
 </div>
 
+{{ option_dicts_json|json_script:"option-dicts-data" }}
+{{ option_state_json|json_script:"option-state-data" }}
 <script>
-function variantGenerator(genUrl) {
+function optionsTree() {
   return {
-    genUrl: genUrl,
-    rows: [],
-    loading: false,
-    results: null,
+    dicts: { materials: [], finishes: [], colors: [] },
+    state: [],   // [{material_id, grades:[{grade_id, finishes:[{finish_id, color_ids}]}], finishes:[...]}]
 
-    init() { this.addRow(); },
-
-    newRow() {
-      return {
-        material_id: '',
-        steel_grade_ids: [],   // выбранные марки (множество)
-        finish_ids: [],        // выбранные обработки; 'none' = без обработки
-        sizes: [], custom_size: false,
-        lengths: ['3'], custom_length: false,
-        unit: 'm',
-        in_stock: 'in_stock', height_mm: '', sku_prefix: '',
-        steel_grades: [],
-        loading_grades: false,
-      };
+    init() {
+      this.dicts = JSON.parse(document.getElementById('option-dicts-data').textContent);
+      this.state = JSON.parse(document.getElementById('option-state-data').textContent);
     },
 
-    addRow()             { this.rows.push(this.newRow()); },
-    removeRow(i)         { this.rows.splice(i, 1); },
-    addLength(row)       { row.lengths.push(''); },
-    removeLength(row, i) { row.lengths.splice(i, 1); },
-    addSize(row)         { row.sizes.push(''); },
-    removeSize(row, i)   { row.sizes.splice(i, 1); },
-
-    toggleIn(arr, val) {
-      const i = arr.indexOf(val);
-      if (i === -1) arr.push(val);
-      else arr.splice(i, 1);
+    get colorGroups() {
+      const groups = [];
+      this.dicts.colors.forEach(c => {
+        let g = groups.find(x => x.label === c.group_label);
+        if (!g) { g = { label: c.group_label, colors: [] }; groups.push(g); }
+        g.colors.push(c);
+      });
+      return groups;
     },
 
-    async onMaterialChange(row) {
-      row.steel_grade_ids = []; row.steel_grades = [];
-      if (!row.material_id) return;
-      row.loading_grades = true;
-      try {
-        const r = await fetch(`/admin/catalog/product/api/steel-grades/?material=${row.material_id}`);
-        row.steel_grades = await r.json();
-      } finally { row.loading_grades = false; }
+    matEntry(mid) {
+      return this.state.find(m => m.material_id === mid) || null;
+    },
+    gradeEntry(mid, gid) {
+      const m = this.matEntry(mid);
+      return m ? (m.grades.find(g => g.grade_id === gid) || null) : null;
+    },
+    finishEntry(container, fid) {
+      return container
+        ? (container.finishes.find(f => f.finish_id === fid) || null)
+        : null;
+    },
+    colorCount(container, fid) {
+      const f = this.finishEntry(container, fid);
+      return f ? f.color_ids.length : 0;
     },
 
-    getCsrf() {
-      const m = document.cookie.match(/csrftoken=([^;]+)/);
-      return m ? m[1] : '';
+    toggleMaterial(mid) {
+      const i = this.state.findIndex(m => m.material_id === mid);
+      if (i >= 0) this.state.splice(i, 1);
+      else this.state.push({ material_id: mid, grades: [], finishes: [] });
     },
-
-    async generate() {
-      for (let i = 0; i < this.rows.length; i++) {
-        if (!this.rows[i].material_id) {
-          alert(`Строка ${i + 1}: выберите материал`); return;
-        }
-      }
-      this.loading = true; this.results = null;
-      try {
-        const resp = await fetch(this.genUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-CSRFToken': this.getCsrf(),
-          },
-          body: JSON.stringify({ rows: this.rows }),
-        });
-        this.results = await resp.json();
-      } catch (e) {
-        this.results = { created: 0, skipped: 0, errors: ['Ошибка сети: ' + e] };
-      } finally {
-        this.loading = false;
-      }
+    toggleGrade(mid, gid) {
+      const m = this.matEntry(mid);
+      if (!m) return;
+      const i = m.grades.findIndex(g => g.grade_id === gid);
+      if (i >= 0) m.grades.splice(i, 1);
+      else m.grades.push({ grade_id: gid, finishes: [] });
+    },
+    toggleFinish(container, fid) {
+      if (!container) return;
+      const i = container.finishes.findIndex(f => f.finish_id === fid);
+      if (i >= 0) container.finishes.splice(i, 1);
+      else container.finishes.push({ finish_id: fid, color_ids: [] });
+    },
+    toggleColor(finishEntry, cid) {
+      const i = finishEntry.color_ids.indexOf(cid);
+      if (i >= 0) finishEntry.color_ids.splice(i, 1);
+      else finishEntry.color_ids.push(cid);
+    },
+    setAllColors(finishEntry, on) {
+      finishEntry.color_ids = on ? this.dicts.colors.map(c => c.id) : [];
     },
   };
 }
