@@ -43,8 +43,8 @@
   .opt-btn-sm { border: 0; padding: 0; background: none; color: #4f8ef7;
                 font-size: 11px; cursor: pointer; }
   .opt-count { font-size: 11px; color: #888; font-weight: 400; }
-  .opt-params { border-top: 1px solid var(--border-color, #e5e5e5);
-                margin-top: 16px; padding-top: 14px; }
+  .opt-leaf-params { border-top: 1px dashed var(--border-color, #ddd);
+                     margin-top: 12px; padding-top: 10px; }
   .opt-param-row { display: flex; align-items: flex-start; gap: 14px;
                    flex-wrap: wrap; margin-bottom: 12px; }
   .opt-param-name { font-size: 13px; font-weight: 600; min-width: 130px;
@@ -74,8 +74,9 @@
   <p class="opt-hint">
     Отметьте доступные ветки. Дерево задаёт разрешённые сочетания: не отмечено —
     покупатель выбрать не сможет. Цвета отмечаются на каждой обработке отдельно
-    (у «Полировки» под 304 и под 430 — свои наборы). Сохраняется вместе с формой
-    товара — кнопкой «Сохранить» внизу.
+    (у «Полировки» под 304 и под 430 — свои наборы). Под цветами — размеры,
+    длины и высоты: списки общие для всего товара, значение добавляется по
+    Enter. Сохраняется вместе с формой товара — кнопкой «Сохранить» внизу.
   </p>
 
   <input type="hidden" name="options_tree" :value="JSON.stringify(state)">
@@ -140,6 +141,35 @@
                                   </div>
                                 </template>
                               </div>
+                              <div class="opt-leaf-params">
+                                <p class="opt-label">Размер / длина / высота
+                                  <span class="opt-count">— списки общие для всего товара, правка видна во всех обработках</span></p>
+                                <template x-for="cfg in paramConfigs" :key="cfg.kind">
+                                  <div class="opt-param-row">
+                                    <p class="opt-param-name">
+                                      <span x-text="cfg.title"></span>
+                                      <small x-text="cfg.hint"></small>
+                                    </p>
+                                    <div class="opt-chips">
+                                      <template x-for="(val, i) in params[cfg.kind].values" :key="val">
+                                        <span class="opt-chip">
+                                          <span x-text="val"></span>
+                                          <button type="button" title="Убрать"
+                                                  @click="params[cfg.kind].values.splice(i, 1)">×</button>
+                                        </span>
+                                      </template>
+                                      <input type="text" class="opt-chip-input"
+                                             :placeholder="cfg.placeholder"
+                                             @keydown.enter.prevent="addParam(cfg.kind, $event.target)"
+                                             @blur="addParam(cfg.kind, $event.target)">
+                                      <label class="opt-check" style="margin-left:8px;">
+                                        <input type="checkbox" x-model="params[cfg.kind].custom">
+                                        <span x-text="cfg.customLabel"></span>
+                                      </label>
+                                    </div>
+                                  </div>
+                                </template>
+                              </div>
                             </div>
                           </template>
                         </div>
@@ -190,6 +220,35 @@
                           </div>
                         </template>
                       </div>
+                      <div class="opt-leaf-params">
+                        <p class="opt-label">Размер / длина / высота
+                          <span class="opt-count">— списки общие для всего товара, правка видна во всех обработках</span></p>
+                        <template x-for="cfg in paramConfigs" :key="cfg.kind">
+                          <div class="opt-param-row">
+                            <p class="opt-param-name">
+                              <span x-text="cfg.title"></span>
+                              <small x-text="cfg.hint"></small>
+                            </p>
+                            <div class="opt-chips">
+                              <template x-for="(val, i) in params[cfg.kind].values" :key="val">
+                                <span class="opt-chip">
+                                  <span x-text="val"></span>
+                                  <button type="button" title="Убрать"
+                                          @click="params[cfg.kind].values.splice(i, 1)">×</button>
+                                </span>
+                              </template>
+                              <input type="text" class="opt-chip-input"
+                                     :placeholder="cfg.placeholder"
+                                     @keydown.enter.prevent="addParam(cfg.kind, $event.target)"
+                                     @blur="addParam(cfg.kind, $event.target)">
+                              <label class="opt-check" style="margin-left:8px;">
+                                <input type="checkbox" x-model="params[cfg.kind].custom">
+                                <span x-text="cfg.customLabel"></span>
+                              </label>
+                            </div>
+                          </div>
+                        </template>
+                      </div>
                     </div>
                   </template>
                 </div>
@@ -201,40 +260,6 @@
     </div>
   </template>
 
-  <!-- Свободные параметры: независимые списки, сочетаний не создают -->
-  <div class="opt-params">
-    <p class="opt-title">Свободные параметры</p>
-    <p class="opt-hint">
-      Ни от чего не зависят и невозможных сочетаний не создают. Нет значений —
-      селектор на карточке не показывается. Значение добавляется по Enter.
-      «Свой …» — покупатель сможет ввести значение вручную, оно уйдёт в заявку.
-    </p>
-    <template x-for="cfg in paramConfigs" :key="cfg.kind">
-      <div class="opt-param-row">
-        <p class="opt-param-name">
-          <span x-text="cfg.title"></span>
-          <small x-text="cfg.hint"></small>
-        </p>
-        <div class="opt-chips">
-          <template x-for="(val, i) in params[cfg.kind].values" :key="val">
-            <span class="opt-chip">
-              <span x-text="val"></span>
-              <button type="button" title="Убрать"
-                      @click="params[cfg.kind].values.splice(i, 1)">×</button>
-            </span>
-          </template>
-          <input type="text" class="opt-chip-input"
-                 :placeholder="cfg.placeholder"
-                 @keydown.enter.prevent="addParam(cfg.kind, $event.target)"
-                 @blur="addParam(cfg.kind, $event.target)">
-          <label class="opt-check" style="margin-left:8px;">
-            <input type="checkbox" x-model="params[cfg.kind].custom">
-            <span x-text="cfg.customLabel"></span>
-          </label>
-        </div>
-      </div>
-    </template>
-  </div>
 </div>
 
 {{ option_dicts_json|json_script:"option-dicts-data" }}
