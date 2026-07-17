@@ -93,17 +93,6 @@ class ProductImageInline(TabularInline):
     thumb_preview.short_description = 'Превью'
 
 
-class ProductParamValueInline(TabularInline):
-    model = ProductParamValue
-    extra = 0
-    fields = ['kind', 'value', 'sort_order']
-    ordering_field = 'sort_order'
-    verbose_name_plural = (
-        'Свободные параметры (размер «20×20», длина «3» в метрах, высота '
-        '«40» в мм; нет строк параметра — селектор на карточке не показывается)'
-    )
-
-
 @admin.register(Product)
 class ProductAdmin(ModelAdmin):
     change_form_template = 'admin/catalog/product/change_form.html'
@@ -114,13 +103,12 @@ class ProductAdmin(ModelAdmin):
     search_fields = ['name', 'slug', 'profile_code']
     prepopulated_fields = {'slug': ('name',)}
     autocomplete_fields = ['category']
-    inlines = [ProductParamValueInline, ProductImageInline]
+    inlines = [ProductImageInline]
+    # Свободные параметры и флаги «свой размер/длина/высота» редактируются
+    # в секции «Дерево опций» на странице товара, не отдельными полями
     fieldsets = [
         (None, {'fields': ['name', 'slug', 'category', 'profile_code',
                            'in_stock', 'is_new', 'is_active']}),
-        ('Свой размер / длина / высота', {'fields': [
-            ('allow_custom_size', 'allow_custom_length', 'allow_custom_height'),
-        ]}),
         ('Описание', {'fields': ['description']}),
         ('SEO', {'classes': ['collapse'], 'fields': ['seo_title', 'seo_description']}),
     ]
@@ -132,6 +120,7 @@ class ProductAdmin(ModelAdmin):
         extra_context.update({
             'option_dicts_json': self._option_dicts(),
             'option_state_json': self._option_state(object_id),
+            'param_state_json': self._param_state(object_id),
         })
         return super().change_view(request, object_id, form_url, extra_context)
 
@@ -200,24 +189,94 @@ class ProductAdmin(ModelAdmin):
             state.append(entry)
         return state
 
+    def _param_state(self, object_id):
+        """Свободные параметры товара для секции опций."""
+        try:
+            product = Product.objects.get(pk=object_id)
+        except Product.DoesNotExist:
+            return {}
+        state = {}
+        for kind, _ in ProductParamValue.KIND_CHOICES:
+            state[kind] = {
+                'values': list(
+                    product.param_values.filter(kind=kind)
+                    .order_by('sort_order', 'id')
+                    .values_list('value', flat=True)
+                ),
+                'custom': getattr(product, f'allow_custom_{kind}'),
+            }
+        return state
+
     # ── Сохранение дерева ────────────────────────────────────────────────────
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
         raw = request.POST.get('options_tree')
-        if raw is None:
-            return  # add-форма: секции дерева ещё нет
-        try:
-            desired = json.loads(raw)
-            if not isinstance(desired, list):
-                raise ValueError
-        except (json.JSONDecodeError, ValueError):
-            self.message_user(
-                request, 'Дерево опций не сохранено: неверный формат данных.',
-                level='error',
-            )
-            return
-        self._sync_option_tree(obj, desired)
+        if raw is not None:  # add-форма: секции опций ещё нет
+            try:
+                desired = json.loads(raw)
+                if not isinstance(desired, list):
+                    raise ValueError
+            except (json.JSONDecodeError, ValueError):
+                self.message_user(
+                    request, 'Дерево опций не сохранено: неверный формат данных.',
+                    level='error',
+                )
+            else:
+                self._sync_option_tree(obj, desired)
+
+        raw = request.POST.get('free_params')
+        if raw is not None:
+            try:
+                desired = json.loads(raw)
+                if not isinstance(desired, dict):
+                    raise ValueError
+            except (json.JSONDecodeError, ValueError):
+                self.message_user(
+                    request, 'Параметры не сохранены: неверный формат данных.',
+                    level='error',
+                )
+            else:
+                self._sync_free_params(obj, desired)
+
+    def _sync_free_params(self, product, desired):
+        """Приводит значения размер/длина/высота и флаги «свой …» к форме."""
+        update_fields = []
+        for kind, _ in ProductParamValue.KIND_CHOICES:
+            entry = desired.get(kind)
+            if not isinstance(entry, dict):
+                continue
+
+            values, seen = [], set()
+            for v in entry.get('values') or []:
+                v = str(v).strip()[:50]
+                if v and v not in seen:
+                    seen.add(v)
+                    values.append(v)
+
+            existing = {
+                pv.value: pv
+                for pv in ProductParamValue.objects.filter(product=product, kind=kind)
+            }
+            for order, value in enumerate(values):
+                pv = existing.pop(value, None)
+                if pv is None:
+                    ProductParamValue.objects.create(
+                        product=product, kind=kind, value=value, sort_order=order,
+                    )
+                elif pv.sort_order != order:
+                    pv.sort_order = order
+                    pv.save(update_fields=['sort_order'])
+            for pv in existing.values():
+                pv.delete()
+
+            flag = f'allow_custom_{kind}'
+            custom = bool(entry.get('custom'))
+            if getattr(product, flag) != custom:
+                setattr(product, flag, custom)
+                update_fields.append(flag)
+        if update_fields:
+            product.save(update_fields=update_fields)
 
     def _sync_option_tree(self, product, desired):
         """Приводит узлы товара к состоянию из формы (создание/обновление/

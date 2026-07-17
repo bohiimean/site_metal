@@ -43,6 +43,25 @@
   .opt-btn-sm { border: 0; padding: 0; background: none; color: #4f8ef7;
                 font-size: 11px; cursor: pointer; }
   .opt-count { font-size: 11px; color: #888; font-weight: 400; }
+  .opt-params { border-top: 1px solid var(--border-color, #e5e5e5);
+                margin-top: 16px; padding-top: 14px; }
+  .opt-param-row { display: flex; align-items: flex-start; gap: 14px;
+                   flex-wrap: wrap; margin-bottom: 12px; }
+  .opt-param-name { font-size: 13px; font-weight: 600; min-width: 130px;
+                    padding-top: 4px; }
+  .opt-param-name small { display: block; font-weight: 400; color: #888;
+                          font-size: 11px; }
+  .opt-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+               flex: 1; min-width: 260px; }
+  .opt-chip { display: inline-flex; align-items: center; gap: 6px;
+              background: rgba(0,0,0,.05); border: 1px solid var(--border-color, #ddd);
+              border-radius: 14px; padding: 3px 8px 3px 12px; font-size: 12.5px; }
+  .opt-chip button { border: 0; background: none; color: #999; cursor: pointer;
+                     font-size: 13px; line-height: 1; padding: 0; }
+  .opt-chip button:hover { color: #c62828; }
+  .opt-chip-input { border: 1px dashed var(--border-color, #bbb); border-radius: 14px;
+                    padding: 3px 10px; font-size: 12.5px; width: 110px;
+                    background: transparent; }
 </style>
 {% endif %}
 {% endblock %}
@@ -60,6 +79,7 @@
   </p>
 
   <input type="hidden" name="options_tree" :value="JSON.stringify(state)">
+  <input type="hidden" name="free_params" :value="JSON.stringify(params)">
 
   <template x-for="mat in dicts.materials" :key="mat.id">
     <div class="opt-material">
@@ -180,19 +200,76 @@
       </template>
     </div>
   </template>
+
+  <!-- Свободные параметры: независимые списки, сочетаний не создают -->
+  <div class="opt-params">
+    <p class="opt-title">Свободные параметры</p>
+    <p class="opt-hint">
+      Ни от чего не зависят и невозможных сочетаний не создают. Нет значений —
+      селектор на карточке не показывается. Значение добавляется по Enter.
+      «Свой …» — покупатель сможет ввести значение вручную, оно уйдёт в заявку.
+    </p>
+    <template x-for="cfg in paramConfigs" :key="cfg.kind">
+      <div class="opt-param-row">
+        <p class="opt-param-name">
+          <span x-text="cfg.title"></span>
+          <small x-text="cfg.hint"></small>
+        </p>
+        <div class="opt-chips">
+          <template x-for="(val, i) in params[cfg.kind].values" :key="val">
+            <span class="opt-chip">
+              <span x-text="val"></span>
+              <button type="button" title="Убрать"
+                      @click="params[cfg.kind].values.splice(i, 1)">×</button>
+            </span>
+          </template>
+          <input type="text" class="opt-chip-input"
+                 :placeholder="cfg.placeholder"
+                 @keydown.enter.prevent="addParam(cfg.kind, $event.target)"
+                 @blur="addParam(cfg.kind, $event.target)">
+          <label class="opt-check" style="margin-left:8px;">
+            <input type="checkbox" x-model="params[cfg.kind].custom">
+            <span x-text="cfg.customLabel"></span>
+          </label>
+        </div>
+      </div>
+    </template>
+  </div>
 </div>
 
 {{ option_dicts_json|json_script:"option-dicts-data" }}
 {{ option_state_json|json_script:"option-state-data" }}
+{{ param_state_json|json_script:"param-state-data" }}
 <script>
 function optionsTree() {
   return {
     dicts: { materials: [], finishes: [], colors: [] },
     state: [],   // [{material_id, grades:[{grade_id, finishes:[{finish_id, color_ids}]}], finishes:[...]}]
+    params: { size: { values: [], custom: false },
+              length: { values: [], custom: false },
+              height: { values: [], custom: false } },
+
+    paramConfigs: [
+      { kind: 'size',   title: 'Размер', hint: 'например 20×20',
+        placeholder: '+ размер', customLabel: 'свой размер' },
+      { kind: 'length', title: 'Длина',  hint: 'в метрах, например 3',
+        placeholder: '+ длина',  customLabel: 'своя длина' },
+      { kind: 'height', title: 'Высота', hint: 'в мм, например 40',
+        placeholder: '+ высота', customLabel: 'своя высота' },
+    ],
 
     init() {
       this.dicts = JSON.parse(document.getElementById('option-dicts-data').textContent);
       this.state = JSON.parse(document.getElementById('option-state-data').textContent);
+      this.params = JSON.parse(document.getElementById('param-state-data').textContent);
+    },
+
+    addParam(kind, input) {
+      const v = input.value.trim().slice(0, 50);
+      input.value = '';
+      if (v && !this.params[kind].values.includes(v)) {
+        this.params[kind].values.push(v);
+      }
     },
 
     get colorGroups() {
