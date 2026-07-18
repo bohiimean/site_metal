@@ -116,7 +116,7 @@ def search_view(request):
         page_num = 1
     page_obj = paginator.get_page(page_num)
 
-    suggestions = Category.objects.filter(is_active=True, depth=1)[:3]
+    suggestions = Category.objects.filter(is_active=True, depth=1).order_by('path')[:3]
     is_htmx = request.headers.get('HX-Request') == 'true'
 
     ctx = {

@@ -1,9 +1,12 @@
 import json
 
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.core.exceptions import ValidationError
+from django.db import transaction
+from django.shortcuts import redirect, render
 from django.utils.html import format_html
 from unfold.admin import ModelAdmin, TabularInline
+from unfold.decorators import action
 from unfold.widgets import SELECT_CLASSES
 from treebeard.forms import movenodeform_factory
 
@@ -52,6 +55,48 @@ class CategoryAdmin(ModelAdmin):
     prepopulated_fields = {'slug': ('name',)}
     search_fields = ['name', 'slug']
     ordering = ['path']  # порядок дерева (и карточек на «Продукции»)
+    actions_list = ['reorder_roots']
+
+    @action(description='Порядок разделов', url_path='reorder', permissions=['change'])
+    def reorder_roots(self, request):
+        """Drag&drop-порядок корневых категорий.
+
+        Отдельного поля порядка у категорий нет: порядок карточек на
+        «Продукции», чипов на главной и колонки футера — это порядок дерева
+        treebeard, поэтому сохранение переставляет сами корневые узлы.
+        """
+        if request.method == 'POST':
+            current = {c.pk for c in Category.get_root_nodes()}
+            try:
+                ids = [int(v) for v in request.POST.get('order', '').split(',') if v]
+            except ValueError:
+                ids = []
+            if set(ids) != current or len(ids) != len(current):
+                messages.error(
+                    request,
+                    'Не удалось сохранить порядок: список разделов изменился. '
+                    'Обновите страницу и попробуйте ещё раз.',
+                )
+            else:
+                with transaction.atomic():
+                    prev_pk = None
+                    for pk in ids:
+                        if prev_pk is not None:
+                            # Перечитываем оба узла: после каждого move
+                            # treebeard меняет path у соседей
+                            Category.objects.get(pk=pk).move(
+                                Category.objects.get(pk=prev_pk), 'right',
+                            )
+                        prev_pk = pk
+                messages.success(request, 'Порядок разделов сохранён.')
+            return redirect('admin:catalog_category_changelist')
+
+        return render(request, 'admin/catalog/category/reorder.html', {
+            **self.admin_site.each_context(request),
+            'title': 'Порядок разделов',
+            'opts': self.model._meta,
+            'roots': Category.get_root_nodes(),
+        })
 
     def tree_name(self, obj):
         indent = '— ' * (obj.depth - 1)
