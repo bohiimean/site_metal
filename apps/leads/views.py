@@ -10,7 +10,7 @@ from django.shortcuts import render
 from django.views.decorators.http import require_POST
 from django_ratelimit.decorators import ratelimit
 
-from apps.catalog.models import ProductVariant
+from apps.catalog.models import Product
 from .captcha import client_ip, verify_captcha
 from .models import Lead
 
@@ -21,39 +21,40 @@ MAX_CART_ITEMS = 100
 MAX_QTY_PER_ITEM = 999
 MAX_STR_LEN = 500
 
+# Выбранные параметры позиции — читаемые строки (SKU в системе нет)
+PARAM_FIELDS = ['material', 'steel_grade', 'finish', 'color',
+                'size', 'length', 'height']
+
 
 def _build_cart_snapshot(client_items):
-    """Строит cart_snapshot из клиентских данных; название/единицу берёт из БД по SKU.
-
-    Клиент управляет только: какой SKU добавить, сколько штук, какой цвет
-    (цвет — параметр заказа, не вариант). Цены нет — её называет менеджер.
-    Если SKU не найден — позиция всё равно сохраняется с пометкой, чтобы менеджер
-    видел, что клиент пытался заказать.
+    """Строит cart_snapshot из клиентских данных; название товара берёт из БД
+    по slug. Параметры (материал/марка/обработка/цвет/размер/длина/высота) —
+    читаемые строки выбора клиента: слепок не ломается при правках каталога.
+    Цены нет — её называет менеджер. Если slug не найден — позиция всё равно
+    сохраняется с пометкой, чтобы менеджер видел, что клиент пытался заказать.
     """
     if not isinstance(client_items, list):
         return []
 
     # Собираем валидные позиции из входа, отсекая мусор.
-    # Ключ позиции — SKU + цвет: один вариант в разных цветах = разные строки.
+    # Ключ позиции — товар + все параметры: разные исполнения = разные строки.
     normalized = []
     seen_keys = set()
     for raw in client_items[:MAX_CART_ITEMS]:
         if not isinstance(raw, dict):
             continue
-        sku = str(raw.get('sku', ''))[:MAX_STR_LEN].strip()
-        if not sku:
+        slug = str(raw.get('slug', ''))[:300].strip()
+        if not slug:
             continue
 
-        # color — название цвета из палитры марки стали (свободная строка)
-        color = str(raw.get('color') or '')[:200].strip() or None
-        # size — свой размер клиента (для вариантов с allow_custom_size)
-        size = str(raw.get('size') or '')[:50].strip() or None
-        # length — своя длина клиента (для вариантов с allow_custom_length)
-        length = str(raw.get('length') or '')[:50].strip() or None
+        params = {
+            f: str(raw.get(f) or '')[:200].strip() or None
+            for f in PARAM_FIELDS
+        }
         # note — свободный комментарий (например, «свой цвет: RAL 6005»)
         note = str(raw.get('note') or '')[:MAX_STR_LEN].strip() or None
 
-        key = (sku, color, size, length, note)
+        key = (slug, note, *params.values())
         if key in seen_keys:
             continue
         seen_keys.add(key)
@@ -64,45 +65,34 @@ def _build_cart_snapshot(client_items):
             qty = 1
         qty = max(1, min(qty, MAX_QTY_PER_ITEM))
 
-        normalized.append({'sku': sku, 'qty': qty, 'color': color, 'size': size, 'length': length, 'note': note})
+        normalized.append({'slug': slug, 'qty': qty, 'note': note, **params})
 
     if not normalized:
         return []
 
-    # Один запрос за всеми вариантами
-    skus = [it['sku'] for it in normalized]
-    variants = {
-        v.sku: v for v in ProductVariant.objects
-        .filter(sku__in=skus)
-        .select_related('product')
+    # Один запрос за всеми товарами
+    products = {
+        p.slug: p for p in Product.objects
+        .filter(slug__in=[it['slug'] for it in normalized])
     }
 
     snapshot = []
     for it in normalized:
-        v = variants.get(it['sku'])
-        row = {'sku': it['sku'], 'qty': it['qty']}
-        if v:
-            row['name'] = v.product.name
-            row['unit'] = v.get_unit_display()
-            row['unit_code'] = v.unit
-            row['product_id'] = v.product_id
-            row['variant_id'] = v.id
-            row['is_active'] = v.is_active and v.product.is_active
-            row['in_stock'] = v.in_stock
+        p = products.get(it['slug'])
+        row = {'slug': it['slug'], 'qty': it['qty']}
+        if p:
+            row['name'] = p.name
+            row['product_id'] = p.pk
+            row['is_active'] = p.is_active
+            row['in_stock'] = p.in_stock
         else:
-            # SKU не найден в БД — товар удалён или клиент прислал мусор.
+            # Товар не найден в БД — удалён или клиент прислал мусор.
             # Сохраняем факт запроса для менеджера.
-            row['name'] = '⚠ SKU не найден в каталоге'
-            row['unit'] = ''
+            row['name'] = '⚠ Товар не найден в каталоге'
             row['is_active'] = False
-        if it['color']:
-            row['color'] = it['color']
-        if it['size']:
-            row['size'] = it['size']
-        if it['length']:
-            row['length'] = it['length']
-        if it['note']:
-            row['note'] = it['note']
+        for f in PARAM_FIELDS + ['note']:
+            if it[f]:
+                row[f] = it[f]
         snapshot.append(row)
 
     return snapshot
@@ -120,15 +110,24 @@ def _send_telegram(lead_id):
         phone_e = e(lead.phone)
 
         if lead.source == 'cart' and lead.cart_snapshot:
-            lines = '\n'.join(
-                f"• {e(str(it.get('name', '?')))} (арт. {e(str(it.get('sku', '?')))})"
-                f" × {int(it.get('qty', 1))} {e(str(it.get('unit', '')))}"
-                + (f"\n   🎨 {e(str(it.get('color')))}" if it.get('color') else '')
-                + (f"\n   📐 свой размер: {e(str(it.get('size')))}" if it.get('size') else '')
-                + (f"\n   📏 своя длина: {e(str(it.get('length')))}" if it.get('length') else '')
-                + (f"\n   💬 {e(str(it.get('note')))}" if it.get('note') else '')
-                for it in lead.cart_snapshot
-            )
+            def item_lines(it):
+                spec = ' / '.join(
+                    str(it[f]) for f in ('material', 'steel_grade', 'finish')
+                    if it.get(f)
+                )
+                dims = ' · '.join(
+                    f'{label} {it[f]}' for f, label in
+                    (('size', 'размер'), ('length', 'длина'), ('height', 'высота'))
+                    if it.get(f)
+                )
+                return (
+                    f"• {e(str(it.get('name', '?')))} × {int(it.get('qty', 1))}"
+                    + (f"\n   ⚙ {e(spec)}" if spec else '')
+                    + (f"\n   🎨 {e(str(it.get('color')))}" if it.get('color') else '')
+                    + (f"\n   📐 {e(dims)}" if dims else '')
+                    + (f"\n   💬 {e(str(it.get('note')))}" if it.get('note') else '')
+                )
+            lines = '\n'.join(item_lines(it) for it in lead.cart_snapshot)
             text = f"🛒 <b>Новая заявка #{lead.pk}</b>\n{name_e}, {phone_e}\n\n{lines}"
         else:
             text = f"📞 <b>Заявка на звонок #{lead.pk}</b>\n{name_e}, {phone_e}"

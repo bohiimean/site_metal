@@ -7,8 +7,8 @@
   - «Покраска RAL»      → ral_palette    (40 RAL-цветов с поиском по группам)
   - «Под заказ»         → custom_request (5 популярных + свободный запрос)
 
-А также обновляет один товар из seed_data (если есть) вариантами для каждой
-обработки, чтобы сразу можно было открыть карточку и пощупать UI.
+А также вешает эти обработки узлами на дерево одного товара из seed_data
+(если есть), чтобы сразу можно было открыть карточку и пощупать UI.
 
 Использование:
     python manage.py seed_colors          # добавить / обновить
@@ -101,13 +101,12 @@ class Command(BaseCommand):
             self._seed_finishes(swatches_colors, ral_colors)
             self._seed_test_variants(swatches_colors, ral_colors)
 
-        self.stdout.write(self.style.SUCCESS('Готово. Откройте карточку товара «Профиль Г-образный 30×30×2» для проверки.'))
+        self.stdout.write(self.style.SUCCESS('Готово. Откройте карточку товара «Профиль П-образный 40×20×2 мм» для проверки.'))
 
     # ──────────────────────────────────────────────────────────────────────────
 
     def _clear(self):
-        from apps.references.models import SteelGradeColor, Color, Finish
-        SteelGradeColor.objects.all().delete()
+        from apps.references.models import Color, Finish
         Color.objects.all().delete()
         Finish.objects.all().delete()
         self.stdout.write('  Цвета / обработки очищены')
@@ -138,7 +137,8 @@ class Command(BaseCommand):
 
     def _seed_finishes(self, swatches_colors, ral_colors):
         """Обработки задают только режим селектора (color_ui) —
-        палитра привязана к марке стали (SteelGradeColor, см. _seed_test_variants)."""
+        набор цветов отмечается на узле-обработке дерева товара
+        (см. _seed_test_variants)."""
         from apps.references.models import Finish
         self.stdout.write('  Создаю обработки…')
 
@@ -162,61 +162,42 @@ class Command(BaseCommand):
         return pol, ral, cust
 
     def _seed_test_variants(self, swatches_colors, ral_colors):
-        """Добавляет варианты к товару g1 (Г-образный 30×30×2) для каждой обработки."""
-        from apps.catalog.models import Product, ProductVariant
-        from apps.references.models import Finish, Material, SteelGrade
+        """Вешает три обработки (по одной на режим color_ui) узлами
+        на первую марку тестового товара, каждую — со своим набором цветов."""
+        from apps.catalog.models import Product, ProductOptionNode
+        from apps.references.models import Finish
 
-        try:
-            product = Product.objects.get(slug='profil-g-30x30x2')
-        except Product.DoesNotExist:
+        product = Product.objects.filter(slug='profil-p-40x20x2').first()
+        if not product:
             self.stdout.write(self.style.WARNING(
-                '  Товар «profil-g-30x30x2» не найден — сначала запустите seed_data. '
-                'Варианты не созданы, но обработки и цвета уже готовы.'
+                '  Товар «profil-p-40x20x2» не найден — сначала запустите seed_data. '
+                'Узлы не созданы, но обработки и цвета уже готовы.'
             ))
             return
 
-        try:
-            # Ищем материал и марку из уже существующих вариантов товара:
-            # берём любой вариант у которого есть steel_grade — не зависим от slug материала.
-            existing = (
-                product.variants
-                .select_related('material', 'steel_grade')
-                .filter(steel_grade__isnull=False)
-                .first()
-            )
-            if not existing:
-                self.stdout.write(self.style.WARNING('  Нет вариантов с маркой у товара — пропуск'))
-                return
-            nerzh  = existing.material
-            grade  = existing.steel_grade
-            pol    = Finish.objects.get(slug='polirovannaya')
-            ral    = Finish.objects.get(slug='pokraska-ral')
-            cust   = Finish.objects.get(slug='pod-zakaz')
-        except Exception as e:
-            self.stdout.write(self.style.WARNING(f'  Пропуск вариантов: {e}'))
+        grade_node = (
+            product.option_nodes
+            .filter(node_type='steel_grade')
+            .select_related('steel_grade')
+            .first()
+        )
+        if not grade_node:
+            self.stdout.write(self.style.WARNING('  У товара нет узла-марки — пропуск'))
             return
 
-        self.stdout.write('  Добавляю тестовые варианты к «Профиль Г-образный 30×30×2»…')
+        self.stdout.write(f'  Вешаю тестовые обработки на «{grade_node.steel_grade}»…')
 
-        # Палитра марки: все цвета — марке тестового товара
-        from apps.references.models import SteelGradeColor
-        for color in list(swatches_colors.values()) + list(ral_colors.values()):
-            SteelGradeColor.objects.get_or_create(steel_grade=grade, color=color)
-        self.stdout.write(f'    Палитра «{grade}»: {grade.grade_colors.count()} цветов')
+        def make(slug, colors):
+            finish = Finish.objects.get(slug=slug)
+            node, _ = ProductOptionNode.objects.get_or_create(
+                product=product, parent=grade_node,
+                node_type='finish', finish=finish,
+            )
+            node.colors.set(colors)
+            self.stdout.write(f'    {finish.name}: {len(colors)} цветов')
 
-        # Цвет — не вариант, а параметр заказа: по одному варианту на обработку.
-        # Режим селектора цвета задаёт color_ui обработки, палитра — SteelGradeColor.
-        def make(sku, finish):
-            if not ProductVariant.objects.filter(sku=sku).exists():
-                ProductVariant.objects.create(
-                    product=product, sku=sku,
-                    material=nerzh, steel_grade=grade,
-                    finish=finish, unit='m', length_m=3,
-                    in_stock='in_stock',
-                )
+        make('polirovannaya', list(swatches_colors.values()))    # swatches
+        make('pokraska-ral',  list(ral_colors.values()))         # ral_palette
+        make('pod-zakaz', [swatches_colors[n] for n in CUSTOM_POPULAR])  # custom_request
 
-        make('G-30-POL',  pol)   # swatches
-        make('G-30-RAL',  ral)   # ral_palette
-        make('G-30-CUST', cust)  # custom_request
-
-        self.stdout.write('  Готово. Варианты созданы.')
+        self.stdout.write('  Готово. Узлы созданы.')

@@ -1,17 +1,20 @@
 import json
-from decimal import Decimal, InvalidOperation
 
-from django.contrib import admin
-from django.http import JsonResponse, HttpResponseRedirect
-from django.shortcuts import get_object_or_404
-from django.urls import reverse
+from django.contrib import admin, messages
+from django.core.exceptions import ValidationError
+from django.db import transaction
+from django.shortcuts import redirect, render
 from django.utils.html import format_html
 from unfold.admin import ModelAdmin, TabularInline
+from unfold.decorators import action
 from unfold.widgets import SELECT_CLASSES
 from treebeard.forms import movenodeform_factory
 
-from apps.references.models import SteelGrade, Material, Finish
-from .models import Category, CategoryFacet, Product, ProductImage, ProductVariant
+from apps.references.models import Material, SteelGrade, Finish, Color
+from .models import (
+    Category, CategoryFacet, Product, ProductImage,
+    ProductOptionNode, ProductParamValue,
+)
 
 
 # Treebeard TreeAdmin несовместим с unfold (битая разметка таблицы, drag&drop
@@ -52,6 +55,48 @@ class CategoryAdmin(ModelAdmin):
     prepopulated_fields = {'slug': ('name',)}
     search_fields = ['name', 'slug']
     ordering = ['path']  # порядок дерева (и карточек на «Продукции»)
+    actions_list = ['reorder_roots']
+
+    @action(description='Порядок разделов', url_path='reorder', permissions=['change'])
+    def reorder_roots(self, request):
+        """Drag&drop-порядок корневых категорий.
+
+        Отдельного поля порядка у категорий нет: порядок карточек на
+        «Продукции», чипов на главной и колонки футера — это порядок дерева
+        treebeard, поэтому сохранение переставляет сами корневые узлы.
+        """
+        if request.method == 'POST':
+            current = {c.pk for c in Category.get_root_nodes()}
+            try:
+                ids = [int(v) for v in request.POST.get('order', '').split(',') if v]
+            except ValueError:
+                ids = []
+            if set(ids) != current or len(ids) != len(current):
+                messages.error(
+                    request,
+                    'Не удалось сохранить порядок: список разделов изменился. '
+                    'Обновите страницу и попробуйте ещё раз.',
+                )
+            else:
+                with transaction.atomic():
+                    prev_pk = None
+                    for pk in ids:
+                        if prev_pk is not None:
+                            # Перечитываем оба узла: после каждого move
+                            # treebeard меняет path у соседей
+                            Category.objects.get(pk=pk).move(
+                                Category.objects.get(pk=prev_pk), 'right',
+                            )
+                        prev_pk = pk
+                messages.success(request, 'Порядок разделов сохранён.')
+            return redirect('admin:catalog_category_changelist')
+
+        return render(request, 'admin/catalog/category/reorder.html', {
+            **self.admin_site.each_context(request),
+            'title': 'Порядок разделов',
+            'opts': self.model._meta,
+            'roots': Category.get_root_nodes(),
+        })
 
     def tree_name(self, obj):
         indent = '— ' * (obj.depth - 1)
@@ -72,13 +117,15 @@ class CategoryAdmin(ModelAdmin):
 class ProductImageInline(TabularInline):
     model = ProductImage
     extra = 0
-    fields = ['image', 'finish', 'color', 'color_group', 'sort_order', 'thumb_preview']
+    fields = ['image', 'material', 'finish', 'color', 'color_group',
+              'sort_order', 'thumb_preview']
     readonly_fields = ['thumb_preview']
     autocomplete_fields = ['color']
     ordering_field = 'sort_order'
     verbose_name_plural = (
-        'Изображения (обработка/цвет/группа пустые — фото галереи; '
-        'заполнены — фото при выборе; точное побеждает общее)'
+        'Фото (условия пустые — фото галереи; заполнены — правило показа '
+        'при выборе; побеждает правило с максимумом совпавших условий, '
+        'тай-брейк: цвет > обработка > материал)'
     )
 
     def thumb_preview(self, obj):
@@ -95,309 +142,258 @@ class ProductImageInline(TabularInline):
 class ProductAdmin(ModelAdmin):
     change_form_template = 'admin/catalog/product/change_form.html'
 
-    list_display = ['name', 'category', 'is_active', 'is_new', 'created_at']
-    list_editable = ['is_active', 'is_new']
-    list_filter = ['is_active', 'is_new', 'category']
+    list_display = ['name', 'category', 'in_stock', 'is_active', 'is_new', 'created_at']
+    list_editable = ['in_stock', 'is_active', 'is_new']
+    list_filter = ['is_active', 'is_new', 'in_stock', 'category']
     search_fields = ['name', 'slug', 'profile_code']
     prepopulated_fields = {'slug': ('name',)}
     autocomplete_fields = ['category']
     inlines = [ProductImageInline]
+    # Свободные параметры и флаги «свой размер/длина/высота» редактируются
+    # в секции «Дерево опций» на странице товара, не отдельными полями
     fieldsets = [
-        (None, {'fields': ['name', 'slug', 'category', 'profile_code', 'is_new', 'is_active']}),
+        (None, {'fields': ['name', 'slug', 'category', 'profile_code',
+                           'in_stock', 'is_new', 'is_active']}),
         ('Описание', {'fields': ['description']}),
         ('SEO', {'classes': ['collapse'], 'fields': ['seo_title', 'seo_description']}),
     ]
 
-    # ── Change view: inject generator context ─────────────────────────────────
+    # ── Change view: данные для секции «Дерево опций» ────────────────────────
 
     def change_view(self, request, object_id, form_url='', extra_context=None):
         extra_context = extra_context or {}
         extra_context.update({
-            'gen_materials':    Material.objects.filter(is_active=True).order_by('name'),
-            'gen_finishes':     Finish.objects.filter(is_active=True).order_by('name'),
-            'gen_unit_choices': ProductVariant.UNIT_CHOICES,
-            'gen_stock_choices': ProductVariant.STOCK_CHOICES,
-            'variants_count':   ProductVariant.objects.filter(product_id=object_id).count(),
+            'option_dicts_json': self._option_dicts(),
+            'option_state_json': self._option_state(object_id),
+            'param_state_json': self._param_state(object_id),
         })
         return super().change_view(request, object_id, form_url, extra_context)
 
-    # ── URLs ──────────────────────────────────────────────────────────────────
+    def _option_dicts(self):
+        """Глобальные справочники для отрисовки чекбокс-дерева."""
+        materials = []
+        for m in Material.objects.filter(is_active=True).order_by('name'):
+            materials.append({
+                'id': m.pk,
+                'name': m.name,
+                'grades': [
+                    {'id': g.pk, 'name': g.name}
+                    for g in m.steel_grades.filter(is_active=True).order_by('name')
+                ],
+            })
+        finishes = [
+            {'id': f.pk, 'name': f.name}
+            for f in Finish.objects.filter(is_active=True).order_by('name')
+        ]
+        group_labels = dict(Color.COLOR_GROUP_CHOICES)
+        colors = [
+            {
+                'id': c.pk, 'name': c.name, 'hex': c.hex_code,
+                'ral': c.ral_code, 'group': c.color_group,
+                'group_label': group_labels.get(c.color_group, 'Без группы'),
+            }
+            for c in Color.objects.filter(is_active=True)
+            .order_by('color_group', 'name')
+        ]
+        return {'materials': materials, 'finishes': finishes, 'colors': colors}
 
-    def get_urls(self):
-        from django.urls import path
-        urls = super().get_urls()
-        return [
-            path('api/steel-grades/', self.admin_site.admin_view(self._api_steel_grades),
-                 name='catalog_product_api_steel_grades'),
-            path('<int:product_id>/generate-variants/',
-                 self.admin_site.admin_view(self._generate_variants_view),
-                 name='catalog_product_generate_variants'),
-        ] + urls
+    def _option_state(self, object_id):
+        """Текущее дерево товара в формате, который редактирует JS-секция."""
+        nodes = list(
+            ProductOptionNode.objects
+            .filter(product_id=object_id)
+            .prefetch_related('colors')
+            .order_by('sort_order', 'id')
+        )
+        by_parent = {}
+        for n in nodes:
+            by_parent.setdefault(n.parent_id, []).append(n)
 
-    # ── API endpoints ─────────────────────────────────────────────────────────
+        def finish_entry(node):
+            return {
+                'finish_id': node.finish_id,
+                'color_ids': [c.pk for c in node.colors.all()],
+            }
 
-    def _api_steel_grades(self, request):
-        material_id = request.GET.get('material')
-        qs = SteelGrade.objects.filter(is_active=True).order_by('name')
-        if material_id:
-            qs = qs.filter(material_id=material_id)
-        return JsonResponse([{'id': g.id, 'name': g.name} for g in qs], safe=False)
+        state = []
+        for m in by_parent.get(None, []):
+            if m.node_type != 'material':
+                continue
+            entry = {'material_id': m.material_id, 'grades': [], 'finishes': []}
+            for child in by_parent.get(m.pk, []):
+                if child.node_type == 'steel_grade':
+                    entry['grades'].append({
+                        'grade_id': child.steel_grade_id,
+                        'finishes': [
+                            finish_entry(f) for f in by_parent.get(child.pk, [])
+                            if f.node_type == 'finish'
+                        ],
+                    })
+                elif child.node_type == 'finish':
+                    entry['finishes'].append(finish_entry(child))
+            state.append(entry)
+        return state
 
-    # ── Generator view (POST-only; UI встроен в change_form товара) ──────────
-
-    def _generate_variants_view(self, request, product_id):
-        product = get_object_or_404(Product, pk=product_id)
-
-        if request.method != 'POST':
-            return HttpResponseRedirect(
-                reverse('admin:catalog_product_change', args=[product.pk])
-            )
-
+    def _param_state(self, object_id):
+        """Свободные параметры товара для секции опций."""
         try:
-            data = json.loads(request.body)
-        except (json.JSONDecodeError, ValueError):
-            return JsonResponse({'error': 'Неверный формат данных'}, status=400)
-        return JsonResponse(self._process_generator(product, data))
+            product = Product.objects.get(pk=object_id)
+        except Product.DoesNotExist:
+            return {}
+        state = {}
+        for kind, _ in ProductParamValue.KIND_CHOICES:
+            state[kind] = {
+                'values': list(
+                    product.param_values.filter(kind=kind)
+                    .order_by('sort_order', 'id')
+                    .values_list('value', flat=True)
+                ),
+                'custom': getattr(product, f'allow_custom_{kind}'),
+            }
+        return state
 
-    def _process_generator(self, product, data):
-        rows = data.get('rows', [])
-        created, skipped, errors, created_list = 0, 0, [], []
-        used_skus = set()
+    # ── Сохранение дерева ────────────────────────────────────────────────────
 
-        for i, row in enumerate(rows):
-            label = f'Строка {i + 1}'
-
-            # Material (required)
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        raw = request.POST.get('options_tree')
+        if raw is not None:  # add-форма: секции опций ещё нет
             try:
-                material = Material.objects.get(pk=int(row['material_id']))
-            except (KeyError, ValueError, Material.DoesNotExist):
-                errors.append(f'{label}: не выбран материал')
+                desired = json.loads(raw)
+                if not isinstance(desired, list):
+                    raise ValueError
+            except (json.JSONDecodeError, ValueError):
+                self.message_user(
+                    request, 'Дерево опций не сохранено: неверный формат данных.',
+                    level='error',
+                )
+            else:
+                self._sync_option_tree(obj, desired)
+
+        raw = request.POST.get('free_params')
+        if raw is not None:
+            try:
+                desired = json.loads(raw)
+                if not isinstance(desired, dict):
+                    raise ValueError
+            except (json.JSONDecodeError, ValueError):
+                self.message_user(
+                    request, 'Параметры не сохранены: неверный формат данных.',
+                    level='error',
+                )
+            else:
+                self._sync_free_params(obj, desired)
+
+    def _sync_free_params(self, product, desired):
+        """Приводит значения размер/длина/высота и флаги «свой …» к форме."""
+        update_fields = []
+        for kind, _ in ProductParamValue.KIND_CHOICES:
+            entry = desired.get(kind)
+            if not isinstance(entry, dict):
                 continue
 
-            # Steel grades (multi; только марки выбранного материала)
-            grade_ids = [int(x) for x in (row.get('steel_grade_ids') or []) if x]
-            if grade_ids:
-                steel_grades = list(SteelGrade.objects.filter(
-                    pk__in=grade_ids, material=material, is_active=True,
-                ))
-                if not steel_grades:
-                    steel_grades = [None]
-            else:
-                steel_grades = [None]
+            values, seen = [], set()
+            for v in entry.get('values') or []:
+                v = str(v).strip()[:50]
+                if v and v not in seen:
+                    seen.add(v)
+                    values.append(v)
 
-            # Finishes (multi; 'none' = без обработки)
-            raw_finish_ids = row.get('finish_ids') or []
-            finishes = []
-            for fid in raw_finish_ids:
-                if fid in ('none', 0, '0', ''):
-                    finishes.append(None)
-                    continue
-                try:
-                    finishes.append(Finish.objects.get(pk=int(fid)))
-                except (ValueError, Finish.DoesNotExist):
-                    pass
-            if not finishes:
-                finishes = [None]
+            existing = {
+                pv.value: pv
+                for pv in ProductParamValue.objects.filter(product=product, kind=kind)
+            }
+            for order, value in enumerate(values):
+                pv = existing.pop(value, None)
+                if pv is None:
+                    ProductParamValue.objects.create(
+                        product=product, kind=kind, value=value, sort_order=order,
+                    )
+                elif pv.sort_order != order:
+                    pv.sort_order = order
+                    pv.save(update_fields=['sort_order'])
+            for pv in existing.values():
+                pv.delete()
 
-            unit     = row.get('unit', 'm')
-            in_stock = row.get('in_stock', 'in_stock')
-            custom_length = bool(row.get('custom_length'))
-            custom_size   = bool(row.get('custom_size'))
-            sku_prefix = (row.get('sku_prefix') or '').strip().upper()
+            flag = f'allow_custom_{kind}'
+            custom = bool(entry.get('custom'))
+            if getattr(product, flag) != custom:
+                setattr(product, flag, custom)
+                update_fields.append(flag)
+        if update_fields:
+            product.save(update_fields=update_fields)
 
-            height_mm = None
-            if row.get('height_mm'):
-                try:
-                    height_mm = Decimal(str(row['height_mm']))
-                except (ValueError, InvalidOperation):
-                    pass
+    def _sync_option_tree(self, product, desired):
+        """Приводит узлы товара к состоянию из формы (создание/обновление/
+        удаление). Марки чужого материала и неизвестные id молча
+        отбрасываются — в форму они могут попасть только руками."""
+        grades_by_material = {}
+        for g in SteelGrade.objects.filter(is_active=True):
+            grades_by_material.setdefault(g.material_id, set()).add(g.pk)
+        material_ids = set(
+            Material.objects.filter(is_active=True).values_list('pk', flat=True))
+        finish_ids = set(
+            Finish.objects.filter(is_active=True).values_list('pk', flat=True))
+        color_ids = set(
+            Color.objects.filter(is_active=True).values_list('pk', flat=True))
 
-            # Sizes (свободные строки: "6×6", "10×10", …)
-            raw_sizes = row.get('sizes') or []
-            sizes = []
-            for sv in raw_sizes:
-                sv = str(sv).strip()[:50]
-                if sv and sv not in sizes:
-                    sizes.append(sv)
-            if not sizes:
-                sizes = ['']
+        keep = set()
 
-            # Lengths
-            raw_lengths = row.get('lengths') or []
-            lengths = []
-            for lv in raw_lengths:
-                try:
-                    lengths.append(Decimal(str(lv)))
-                except (ValueError, InvalidOperation):
-                    pass
-            if not lengths:
-                lengths = [None]
+        def get_node(parent, node_type, **ref):
+            node, _ = ProductOptionNode.objects.get_or_create(
+                product=product, parent=parent, node_type=node_type, **ref,
+            )
+            keep.add(node.pk)
+            return node
 
-            # Generate: марки × обработки × размеры × длины
-            for steel_grade in steel_grades:
-                for finish in finishes:
-                    for size in sizes:
-                        for length_m in lengths:
-                            sku = self._build_sku(
-                                product, material, steel_grade, finish, size, length_m,
-                                sku_prefix, used_skus,
-                            )
-                            used_skus.add(sku)
-
-                            if ProductVariant.objects.filter(sku=sku).exists():
-                                skipped += 1
-                                continue
-
-                            # Комбинация уже существует под другим SKU — не дублируем
-                            if ProductVariant.objects.filter(
-                                product=product,
-                                material=material,
-                                steel_grade=steel_grade,
-                                finish=finish,
-                                size=size,
-                                length_m=length_m,
-                                height_mm=height_mm,
-                            ).exists():
-                                skipped += 1
-                                continue
-
-                            try:
-                                v = ProductVariant(
-                                    product=product,
-                                    sku=sku,
-                                    material=material,
-                                    steel_grade=steel_grade,
-                                    finish=finish,
-                                    unit=unit,
-                                    in_stock=in_stock,
-                                    size=size,
-                                    length_m=length_m,
-                                    height_mm=height_mm,
-                                    allow_custom_size=custom_size,
-                                    allow_custom_length=custom_length,
-                                )
-                                v.full_clean()
-                                v.save()
-                                created += 1
-                                parts = [
-                                    steel_grade.name if steel_grade else None,
-                                    finish.name if finish else None,
-                                    size or None,
-                                    f'{length_m} м' if length_m else None,
-                                ]
-                                created_list.append(
-                                    f'{sku} ({", ".join(p for p in parts if p) or "—"})'
-                                )
-                            except Exception as e:
-                                errors.append(f'{label} [{sku}]: {e}')
-                                skipped += 1
-
-        return {
-            'created': created,
-            'skipped': skipped,
-            'errors': errors,
-            'created_list': created_list,
-        }
-
-    def _build_sku(self, product, material, steel_grade, finish, size, length_m, prefix, used_skus):
-        if prefix:
-            parts = [prefix]
-        else:
-            parts = [product.slug[:10].upper()]
-            parts.append(material.slug[:5].upper() if material.slug else f'M{material.pk}')
-
-        # Марка, обработка и размер входят в SKU и при префиксе:
-        # в одной строке их теперь может быть несколько
-        if steel_grade:
-            grade_part = ''.join(ch for ch in steel_grade.name.upper() if ch.isalnum())[:8]
-            parts.append(grade_part or f'G{steel_grade.pk}')
-        if finish:
-            parts.append(finish.slug[:5].upper() if finish.slug else f'F{finish.pk}')
-
-        if size:
-            # «6×6», «6x6», «6х6» (лат./кир./знак умножения) → «6X6»
-            size_part = ''.join(
-                'X' if ch in 'X×Х' else ch
-                for ch in size.upper() if ch.isalnum() or ch in '×.'
-            )[:12]
-            if size_part:
-                parts.append(size_part)
-
-        if length_m:
-            l = str(length_m).rstrip('0').rstrip('.')
-            parts.append(f'{l}M')
-
-        base = '-'.join(parts)[:90]
-        sku = base
-        counter = 2
-        while sku in used_skus or ProductVariant.objects.filter(sku=sku).exists():
-            sku = f'{base}-{counter}'
-            counter += 1
-        return sku
-
-
-# ─── Фильтр по товару для списка вариантов ───────────────────────────────────
-
-class ProductListFilter(admin.SimpleListFilter):
-    """Принимает ?product__id=X из ссылки на странице товара.
-    Показывает фильтр в сайдбаре только когда он активен."""
-    title = 'Товар'
-    parameter_name = 'product__id'
-
-    def lookups(self, request, model_admin):
-        pk = request.GET.get(self.parameter_name)
-        if pk:
+        def as_int(v):
             try:
-                p = Product.objects.get(pk=pk)
-                return [(pk, p.name)]
-            except Product.DoesNotExist:
-                pass
-        return []
+                return int(v)
+            except (TypeError, ValueError):
+                return None
 
-    def queryset(self, request, queryset):
-        if self.value():
-            return queryset.filter(product_id=self.value())
-        return queryset
+        def sync_finish(parent, entry, order):
+            fid = as_int(entry.get('finish_id'))
+            if fid not in finish_ids:
+                return
+            node = get_node(parent, 'finish', finish_id=fid)
+            if node.sort_order != order:
+                node.sort_order = order
+                node.save()
+            selected = [
+                c for c in map(as_int, entry.get('color_ids') or [])
+                if c in color_ids
+            ]
+            node.colors.set(selected)
 
+        for m_order, m_entry in enumerate(desired):
+            if not isinstance(m_entry, dict):
+                continue
+            mid = as_int(m_entry.get('material_id'))
+            if mid not in material_ids:
+                continue
+            m_node = get_node(None, 'material', material_id=mid)
+            if m_node.sort_order != m_order:
+                m_node.sort_order = m_order
+                m_node.save()
 
-# ─── ProductVariant standalone admin ─────────────────────────────────────────
+            for g_order, g_entry in enumerate(m_entry.get('grades') or []):
+                if not isinstance(g_entry, dict):
+                    continue
+                gid = as_int(g_entry.get('grade_id'))
+                if gid not in grades_by_material.get(mid, set()):
+                    continue
+                g_node = get_node(m_node, 'steel_grade', steel_grade_id=gid)
+                if g_node.sort_order != g_order:
+                    g_node.sort_order = g_order
+                    g_node.save()
+                for f_order, f_entry in enumerate(g_entry.get('finishes') or []):
+                    if isinstance(f_entry, dict):
+                        sync_finish(g_node, f_entry, f_order)
 
-@admin.register(ProductVariant)
-class ProductVariantAdmin(ModelAdmin):
-    list_display = [
-        'sku', 'product_link', 'material', 'steel_grade',
-        'finish', 'size', 'length_m', 'allow_custom_size', 'allow_custom_length',
-        'unit', 'in_stock', 'is_active',
-    ]
-    list_display_links = ['sku']
-    list_editable = ['allow_custom_size', 'allow_custom_length', 'in_stock', 'is_active']
-    list_filter = [ProductListFilter, 'material', 'finish', 'in_stock', 'is_active']
-    search_fields = ['sku', 'product__name']
-    list_per_page = 50
-    list_max_show_all = 200
-    list_select_related = ['product', 'material', 'steel_grade', 'finish']
-    raw_id_fields = ['product']
-    # autocomplete_fields (Select2) не совместим с зависимыми селектами:
-    # ручная подмена options через JS не обновляет состояние Select2.
-    # Справочники (материал/марка/обработка) короткие — обычный select работает нормально.
-    fieldsets = [
-        (None, {'fields': [
-            ('sku', 'is_active'),
-            'product',
-            ('material', 'steel_grade'),
-            'finish',
-            ('size', 'height_mm', 'length_m'),
-            ('allow_custom_size', 'allow_custom_length'),
-            'unit',
-            'in_stock',
-        ]}),
-    ]
+            for f_order, f_entry in enumerate(m_entry.get('finishes') or []):
+                if isinstance(f_entry, dict):
+                    sync_finish(m_node, f_entry, f_order)
 
-    def product_link(self, obj):
-        url = reverse('admin:catalog_product_change', args=[obj.product_id])
-        return format_html('<a href="{}">{}</a>', url, obj.product.name)
-    product_link.short_description = 'Товар'
-    product_link.admin_order_field = 'product__name'
-
-    class Media:
-        js = ('admin/js/variant_dependent_selects.js',)
+        # Всё, чего нет в форме, — удаляется (дочерние уходят каскадом)
+        ProductOptionNode.objects.filter(product=product).exclude(pk__in=keep).delete()

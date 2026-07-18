@@ -111,58 +111,7 @@ class Color(models.Model):
         return self.name
 
 
-class MaterialColor(models.Model):
-    """Палитра материала — фолбэк для вариантов, у которых нет своей палитры
-    марки: либо марка не задана вовсе (алюминий: «анодированный»/«сырой»),
-    либо у марки не отмечен ни один цвет.
-
-    Приоритет на карточке товара: палитра марки (SteelGradeColor) →
-    палитра материала (MaterialColor) → цвета нет.
-    """
-    material = models.ForeignKey(
-        Material, on_delete=models.CASCADE,
-        related_name='material_colors',
-        verbose_name='Материал',
-    )
-    color = models.ForeignKey(
-        Color, on_delete=models.CASCADE,
-        related_name='material_colors',
-        verbose_name='Цвет',
-    )
-
-    class Meta:
-        verbose_name = 'Цвет материала'
-        verbose_name_plural = 'Цвета материалов'
-        unique_together = [('material', 'color')]
-
-    def __str__(self):
-        return f'{self.material} — {self.color}'
-
-
-class SteelGradeColor(models.Model):
-    """Палитра марки стали: какие цвета доступны для товаров из этой марки.
-
-    Палитра привязана к марке, а интерфейс выбора цвета (свотчи/RAL/свой) —
-    к обработке (Finish.color_ui). На карточке товара цвет показывается только
-    при выбранной обработке: цвет — результат обработки. Если у марки палитра
-    пуста или марки у варианта нет — используется палитра материала
-    (MaterialColor).
-    """
-    steel_grade = models.ForeignKey(
-        SteelGrade, on_delete=models.CASCADE,
-        related_name='grade_colors',
-        verbose_name='Марка стали',
-    )
-    color = models.ForeignKey(
-        Color, on_delete=models.CASCADE,
-        related_name='grade_colors',
-        verbose_name='Цвет',
-    )
-
-    class Meta:
-        verbose_name = 'Цвет марки стали'
-        verbose_name_plural = 'Цвета марок стали'
-        unique_together = [('steel_grade', 'color')]
-
-    def __str__(self):
-        return f'{self.steel_grade} — {self.color}'
+# Палитры марок/материалов (MaterialColor, SteelGradeColor) удалены:
+# доступные цвета отмечаются на узле-обработке дерева опций товара
+# (catalog.ProductOptionNode.colors) — у каждой связки «марка + обработка»
+# конкретного товара свой набор из этого общего справочника.

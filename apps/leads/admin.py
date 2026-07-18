@@ -61,24 +61,34 @@ class LeadAdmin(ModelAdmin):
 
         def _row(item):
             base = format_html(
-                '{} &nbsp;·&nbsp; арт. {} &nbsp;·&nbsp; ×{} {}',
+                '{} &nbsp;·&nbsp; ×{}',
                 item.get('name', '?'),
-                item.get('sku', '?'),
                 item.get('qty', 1),
-                item.get('unit', ''),
             )
             extras = []
+            spec = ' / '.join(
+                str(item[f]) for f in ('material', 'steel_grade', 'finish')
+                if item.get(f)
+            )
+            if spec:
+                extras.append(format_html(
+                    '<span style="color:#555">⚙ {}</span>', spec,
+                ))
             if item.get('color'):
                 extras.append(format_html(
                     '<span style="color:#555">🎨 {}</span>', item['color'],
                 ))
             if item.get('size'):
                 extras.append(format_html(
-                    '<span style="color:#555">📐 свой размер: {}</span>', item['size'],
+                    '<span style="color:#555">📐 размер: {}</span>', item['size'],
                 ))
             if item.get('length'):
                 extras.append(format_html(
-                    '<span style="color:#555">📏 своя длина: {}</span>', item['length'],
+                    '<span style="color:#555">📏 длина: {}</span>', item['length'],
+                ))
+            if item.get('height'):
+                extras.append(format_html(
+                    '<span style="color:#555">📏 высота: {}</span>', item['height'],
                 ))
             if item.get('note'):
                 extras.append(format_html(

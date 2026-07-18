@@ -20,7 +20,9 @@ def index(request):
         if (products := list(block.get_products()))
     ]
 
-    categories = list(Category.objects.filter(is_active=True, depth=1))
+    categories = list(
+        Category.objects.filter(is_active=True, depth=1).order_by('path')
+    )
 
     return render(request, 'home/index.html', {
         'blocks_with_products': blocks_with_products,

@@ -1,5 +1,5 @@
 {% load static %}
-{% with image=product.prefetched_images.0 variant=product.prefetched_variants.0 %}
+{% with image=product.prefetched_images.0 %}
 <article class="product-card group">
 
   <!-- Изображение — edge-to-edge (overflow-hidden на карточке) -->
@@ -21,7 +21,7 @@
       <span class="badge-new absolute top-2 left-2">Новинка</span>
     {% endif %}
 
-    {% if variant and variant.in_stock == 'on_order' %}
+    {% if product.in_stock == 'on_order' %}
       <span class="absolute inset-0 flex items-end justify-center pb-3">
         <span class="bg-black/60 text-white text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-sm">
           Под заказ
@@ -37,11 +37,9 @@
       {{ product.name }}
     </a>
 
-    {% if variant %}
+    {% if product.prefetched_materials %}
       <p class="text-[11px] text-muted">
-        {{ variant.material.name }}
-        {% if variant.steel_grade %}&nbsp;·&nbsp;{{ variant.steel_grade.name }}{% endif %}
-        {% if variant.length_m %}&nbsp;·&nbsp;{{ variant.length_m }}&nbsp;м{% endif %}
+        {% for node in product.prefetched_materials %}{% if not forloop.first %}&nbsp;·&nbsp;{% endif %}{{ node.material.name }}{% endfor %}
       </p>
     {% endif %}
 
@@ -52,9 +50,7 @@
         @click="$store.cart.add({
           name: '{{ product.name|escapejs }}',
           slug: '{{ product.slug }}',
-          sku:  '{{ variant.sku|default:''|escapejs }}',
           qty:  1,
-          unit:  '{{ variant.get_unit_display|default:''|escapejs }}',
           image: {% if image and image.image %}'{{ image.thumb.url }}'{% else %}null{% endif %}
         })">
         Заказать
