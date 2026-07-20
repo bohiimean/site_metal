@@ -142,13 +142,53 @@ class ProductImageInline(TabularInline):
 class ProductAdmin(ModelAdmin):
     change_form_template = 'admin/catalog/product/change_form.html'
 
-    list_display = ['name', 'category', 'in_stock', 'is_active', 'is_new', 'created_at']
-    list_editable = ['in_stock', 'is_active', 'is_new']
-    list_filter = ['is_active', 'is_new', 'in_stock', 'category']
+    list_display = ['name', 'category', 'in_stock', 'is_active',
+                    'is_new', 'is_featured', 'created_at']
+    list_editable = ['in_stock', 'is_active', 'is_new', 'is_featured']
+    list_filter = ['is_active', 'is_new', 'is_featured', 'in_stock', 'category']
     search_fields = ['name', 'slug', 'profile_code']
     prepopulated_fields = {'slug': ('name',)}
     autocomplete_fields = ['category']
     inlines = [ProductImageInline]
+    # Популярные — сверху и в админском списке; порядок между ними — featured_order
+    ordering = ['-is_featured', 'featured_order', '-created_at']
+    actions_list = ['reorder_featured']
+
+    @action(description='Порядок популярных', url_path='reorder-featured',
+            permissions=['change'])
+    def reorder_featured(self, request):
+        """Drag&drop-порядок только популярных товаров (is_featured=True).
+
+        Отдельная страница вместо перетаскивания всего списка: курируется
+        небольшой набор, порядок пишется в featured_order. На витрине этот же
+        порядок поднимает популярные наверх (SORT_MAP['new'])."""
+        featured = Product.objects.filter(is_featured=True)
+        if request.method == 'POST':
+            current = {p.pk for p in featured}
+            try:
+                ids = [int(v) for v in request.POST.get('order', '').split(',') if v]
+            except ValueError:
+                ids = []
+            if set(ids) != current or len(ids) != len(current):
+                messages.error(
+                    request,
+                    'Не удалось сохранить порядок: список популярных изменился. '
+                    'Обновите страницу и попробуйте ещё раз.',
+                )
+            else:
+                with transaction.atomic():
+                    for order, pk in enumerate(ids):
+                        Product.objects.filter(pk=pk).update(featured_order=order)
+                messages.success(request, 'Порядок популярных сохранён.')
+            return redirect('admin:catalog_product_changelist')
+
+        return render(request, 'admin/catalog/product/reorder_featured.html', {
+            **self.admin_site.each_context(request),
+            'title': 'Порядок популярных',
+            'opts': self.model._meta,
+            'products': featured.select_related('category')
+            .order_by('featured_order', '-created_at'),
+        })
     # Свободные параметры и флаги «свой размер/длина/высота» редактируются
     # в секции «Дерево опций» на странице товара, не отдельными полями
     fieldsets = [

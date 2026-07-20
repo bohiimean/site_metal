@@ -1,0 +1,114 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block breadcrumbs %}
+<div class="px-4">
+  <div class="container mb-6 mx-auto -my-3 lg:mb-12">
+    <ul class="flex flex-wrap">
+      <li class="whitespace-nowrap"><a href="{% url 'admin:index' %}" class="text-primary-600 dark:text-primary-500">{% trans 'Home' %}</a><span class="mx-2 text-base-300 dark:text-base-700">/</span></li>
+      <li class="whitespace-nowrap"><a href="{% url 'admin:catalog_product_changelist' %}" class="text-primary-600 dark:text-primary-500">{{ opts.verbose_name_plural|capfirst }}</a><span class="mx-2 text-base-300 dark:text-base-700">/</span></li>
+      <li class="whitespace-nowrap">{{ title }}</li>
+    </ul>
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<style>
+  .reorder-hint { font-size: 13px; color: #888; margin: 0 0 16px; max-width: 640px; }
+  .reorder-list { list-style: none; margin: 0 0 20px; padding: 0; max-width: 640px; }
+  .reorder-item {
+    display: flex; align-items: center; gap: 12px;
+    background: var(--body-bg, #fff);
+    border: 1px solid var(--border-color, #ccc);
+    border-radius: 4px;
+    padding: 12px 16px; margin-bottom: 8px;
+    cursor: grab; user-select: none;
+    font-size: 14px; font-weight: 500;
+  }
+  .reorder-item.dragging { opacity: .4; cursor: grabbing; }
+  .reorder-item .grip { color: #aaa; font-size: 15px; letter-spacing: 1px; }
+  .reorder-item .num { color: #aaa; font-size: 12px; min-width: 22px; }
+  .reorder-item .cat { color: #999; font-weight: 400; font-size: 12px; }
+  .reorder-item .inactive-badge {
+    font-size: 11px; color: #999; font-weight: 400;
+    border: 1px solid var(--border-color, #ddd);
+    border-radius: 10px; padding: 1px 8px;
+  }
+</style>
+
+<p class="reorder-hint">
+  Здесь только товары с галочкой «Популярный». Перетащите их в нужном порядке
+  и нажмите «Сохранить» — так они встанут наверху в каталоге и на страницах
+  категорий (в пределах своей категории покупатель увидит их в том же
+  относительном порядке). Чтобы добавить или убрать товар из этого списка —
+  отметьте/снимите «Популярный» в списке «Товары».
+</p>
+
+<form method="post" id="reorder-form">
+  {% csrf_token %}
+  <ul class="reorder-list" id="reorder-list">
+    {% for p in products %}
+      <li class="reorder-item" draggable="true" data-id="{{ p.pk }}">
+        <span class="grip">⠿</span>
+        <span class="num">{{ forloop.counter }}</span>
+        <span>{{ p.name }}</span>
+        <span class="cat">{{ p.category }}</span>
+        {% if not p.is_active %}<span class="inactive-badge">выключен</span>{% endif %}
+      </li>
+    {% empty %}
+      <li>Популярных товаров пока нет. Отметьте «Популярный» в списке товаров.</li>
+    {% endfor %}
+  </ul>
+  <input type="hidden" name="order" id="reorder-order">
+  {% if products %}
+  <button type="submit" class="bg-primary-600 text-white rounded px-4 py-2 text-sm font-medium cursor-pointer border-0">
+    Сохранить
+  </button>
+  {% endif %}
+</form>
+
+<script>
+(function () {
+  const list = document.getElementById('reorder-list');
+  let dragged = null;
+
+  function renumber() {
+    list.querySelectorAll('.reorder-item').forEach(function (item, i) {
+      const num = item.querySelector('.num');
+      if (num) num.textContent = i + 1;
+    });
+  }
+
+  list.querySelectorAll('.reorder-item').forEach(function (item) {
+    item.addEventListener('dragstart', function () {
+      dragged = item;
+      requestAnimationFrame(function () { item.classList.add('dragging'); });
+    });
+    item.addEventListener('dragend', function () {
+      item.classList.remove('dragging');
+      dragged = null;
+      renumber();
+    });
+  });
+
+  list.addEventListener('dragover', function (e) {
+    e.preventDefault();
+    if (!dragged) return;
+    const siblings = Array.from(list.querySelectorAll('.reorder-item:not(.dragging)'));
+    const next = siblings.find(function (s) {
+      const rect = s.getBoundingClientRect();
+      return e.clientY < rect.top + rect.height / 2;
+    });
+    if (next) list.insertBefore(dragged, next);
+    else list.appendChild(dragged);
+  });
+
+  document.getElementById('reorder-form').addEventListener('submit', function () {
+    const ids = Array.from(list.querySelectorAll('.reorder-item'))
+      .map(function (i) { return i.dataset.id; });
+    document.getElementById('reorder-order').value = ids.join(',');
+  });
+})();
+</script>
+{% endblock %}

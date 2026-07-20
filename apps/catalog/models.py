@@ -133,6 +133,15 @@ class Product(models.Model):
     description = models.TextField('Описание', blank=True)
     profile_code = models.CharField('Номенклатурный код', max_length=100, blank=True)
     is_new = models.BooleanField('Новинка', default=False)
+    is_featured = models.BooleanField(
+        'Популярный', default=False,
+        help_text='Поднимается выше в каталоге и в списке товаров. Порядок '
+                  'между популярными задаётся на странице «Порядок популярных».',
+    )
+    featured_order = models.PositiveIntegerField(
+        'Порядок в популярных', default=0,
+        help_text='Заполняется автоматически со страницы «Порядок популярных».',
+    )
     in_stock = models.CharField(
         'Наличие', max_length=20,
         choices=STOCK_CHOICES, default='in_stock',

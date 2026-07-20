@@ -15,10 +15,15 @@ from .models import (
 )
 
 PAGE_SIZE = 9
+# Значения — кортежи полей для order_by. Дефолт «new» поднимает популярные
+# (is_featured) наверх в заданном порядке (featured_order), остальное — по
+# новизне. При явной сортировке по имени закрепление не применяется — это
+# осознанный выбор посетителя.
 SORT_MAP = {
-    'name': 'name',
-    'new':  '-created_at',
+    'name': ('name',),
+    'new':  ('-is_featured', 'featured_order', '-created_at'),
 }
+DEFAULT_SORT = SORT_MAP['new']
 
 # Набор фасетов по умолчанию — для категорий без своей настройки
 # (CategoryFacet) и для страниц без категории (весь каталог, поиск)
@@ -110,7 +115,7 @@ def search_view(request):
     products = filterset.qs.distinct()
 
     sort = request.GET.get('sort', 'new')
-    products = products.order_by(SORT_MAP.get(sort, '-created_at'))
+    products = products.order_by(*SORT_MAP.get(sort, DEFAULT_SORT))
 
     paginator = Paginator(products, PAGE_SIZE)
     try:
@@ -180,7 +185,7 @@ def _render_catalog(request, category):
     products = filterset.qs.distinct()
 
     sort = request.GET.get('sort', 'new')
-    products = products.order_by(SORT_MAP.get(sort, '-created_at'))
+    products = products.order_by(*SORT_MAP.get(sort, DEFAULT_SORT))
 
     paginator = Paginator(products, PAGE_SIZE)
     try:
