@@ -8,7 +8,7 @@ from django.urls import reverse
 from django.utils.html import strip_tags
 from django.utils.text import Truncator
 
-from apps.references.models import Material, SteelGrade, Finish
+from apps.references.models import Material, SteelGrade, Finish, Color
 from .filters import ProductFilter
 from .models import (
     Category, CategoryFacet, Product, ProductOptionNode, ProductParamValue,
@@ -66,6 +66,9 @@ def _facet_ctx(request, category=None):
         elif key == 'finish':
             options = Finish.objects.filter(
                 is_active=True, pk__in=node_qs.values('finish_id'))
+        elif key == 'color':
+            options = Color.objects.filter(
+                is_active=True, pk__in=node_qs.values('colors'))
         elif key == 'size':
             values = param_qs.filter(kind='size').values_list('value', flat=True).distinct()
             options = [

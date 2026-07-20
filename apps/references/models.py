@@ -111,7 +111,35 @@ class Color(models.Model):
         return self.name
 
 
-# Палитры марок/материалов (MaterialColor, SteelGradeColor) удалены:
+class ColorPalette(models.Model):
+    """Готовый набор цветов-шаблон (например «Нержавейка 304, полировка»).
+
+    Это НЕ живая привязка: палитра только заготовка, из которой в редакторе
+    дерева опций товара галочки цветов переносятся на узел-обработку одним
+    кликом. После применения набор живёт на узле товара
+    (catalog.ProductOptionNode.colors) и правится независимо — правка палитры
+    задним числом чужие товары не меняет. Так убирается ручное переотмечание
+    одних и тех же цветов на каждом товаре, но сохраняется независимость
+    наборов у разных позиций.
+    """
+    name = models.CharField('Название', max_length=120)
+    colors = models.ManyToManyField(
+        Color, related_name='palettes',
+        verbose_name='Цвета',
+        help_text='Оттенки, которые перенесутся на обработку при применении',
+    )
+    is_active = models.BooleanField('Активна', default=True)
+
+    class Meta:
+        verbose_name = 'Палитра цветов'
+        verbose_name_plural = 'Палитры цветов'
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
+
+
+# Живые палитры марок/материалов (MaterialColor, SteelGradeColor) удалены:
 # доступные цвета отмечаются на узле-обработке дерева опций товара
-# (catalog.ProductOptionNode.colors) — у каждой связки «марка + обработка»
-# конкретного товара свой набор из этого общего справочника.
+# (catalog.ProductOptionNode.colors). ColorPalette выше — только шаблон для
+# переиспользования, а не привязка «марка+обработка↔цвет».

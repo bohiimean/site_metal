@@ -10,7 +10,7 @@ from unfold.decorators import action
 from unfold.widgets import SELECT_CLASSES
 from treebeard.forms import movenodeform_factory
 
-from apps.references.models import Material, SteelGrade, Finish, Color
+from apps.references.models import Material, SteelGrade, Finish, Color, ColorPalette
 from .models import (
     Category, CategoryFacet, Product, ProductImage,
     ProductOptionNode, ProductParamValue,
@@ -195,7 +195,19 @@ class ProductAdmin(ModelAdmin):
             for c in Color.objects.filter(is_active=True)
             .order_by('color_group', 'name')
         ]
-        return {'materials': materials, 'finishes': finishes, 'colors': colors}
+        palettes = [
+            {
+                'id': p.pk,
+                'name': p.name,
+                'color_ids': [c.pk for c in p.colors.all()],
+            }
+            for p in ColorPalette.objects.filter(is_active=True)
+            .prefetch_related('colors').order_by('name')
+        ]
+        return {
+            'materials': materials, 'finishes': finishes,
+            'colors': colors, 'palettes': palettes,
+        }
 
     def _option_state(self, object_id):
         """Текущее дерево товара в формате, который редактирует JS-секция."""

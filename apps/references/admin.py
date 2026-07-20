@@ -1,7 +1,7 @@
 from django.contrib import admin
 from unfold.admin import ModelAdmin
 
-from .models import Material, SteelGrade, Finish, Color
+from .models import Material, SteelGrade, Finish, Color, ColorPalette
 
 
 @admin.register(Material)
@@ -47,3 +47,15 @@ class ColorAdmin(ModelAdmin):
             )
         return '—'
     color_swatch.short_description = ''
+
+
+@admin.register(ColorPalette)
+class ColorPaletteAdmin(ModelAdmin):
+    list_display  = ['name', 'color_count', 'is_active']
+    list_editable = ['is_active']
+    search_fields = ['name']
+    filter_horizontal = ['colors']
+
+    def color_count(self, obj):
+        return obj.colors.count()
+    color_count.short_description = 'Цветов'

@@ -62,6 +62,7 @@ class CategoryFacet(models.Model):
         ('material',    'Материал'),
         ('steel_grade', 'Марка стали'),
         ('finish',      'Обработка'),
+        ('color',       'Цвет'),
         ('size',        'Размер'),
         ('length',      'Длина'),
         ('in_stock',    'Только в наличии'),

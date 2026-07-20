@@ -18,6 +18,8 @@
                {% if opt.pk|stringformat:'s' in selected %}checked{% endif %}
                {% if opt.material_id %}data-material="{{ opt.material_id }}"{% endif %}
                class="accent-[var(--color-accent)] w-3.5 h-3.5 rounded-sm">
+        {% if opt.hex_code %}<span class="inline-block w-3 h-3 rounded-full border border-black/15 shrink-0"
+                                   style="background:{{ opt.hex_code }}"></span>{% endif %}
         {{ opt.name }}
       </label>
     {% endfor %}

@@ -62,6 +62,12 @@
   .opt-chip-input { border: 1px dashed var(--border-color, #bbb); border-radius: 14px;
                     padding: 3px 10px; font-size: 12.5px; width: 110px;
                     background: transparent; }
+  .opt-palette-ctl { display: inline-flex; align-items: center; gap: 6px;
+                     margin-left: auto; }
+  .opt-palette-select { font-size: 11px; padding: 2px 4px; max-width: 200px;
+                        border: 1px solid var(--border-color, #ccc); border-radius: 4px;
+                        background: var(--body-bg, #fff); color: inherit; }
+  .opt-btn-sm:disabled { color: #bbb; cursor: default; }
 </style>
 {% endif %}
 {% endblock %}
@@ -119,11 +125,23 @@
                           </label>
                           <template x-if="finishEntry(gradeEntry(mat.id, gr.id), fin.id)">
                             <div class="opt-colors">
-                              <div style="display:flex;gap:10px;margin-bottom:6px;">
+                              <div style="display:flex;gap:10px;margin-bottom:6px;align-items:center;flex-wrap:wrap;">
                                 <button type="button" class="opt-btn-sm"
                                         @click="setAllColors(finishEntry(gradeEntry(mat.id, gr.id), fin.id), true)">Выбрать все цвета</button>
                                 <button type="button" class="opt-btn-sm"
                                         @click="setAllColors(finishEntry(gradeEntry(mat.id, gr.id), fin.id), false)">Снять все</button>
+                                <template x-if="dicts.palettes && dicts.palettes.length">
+                                  <span class="opt-palette-ctl" x-data="{ pid: '' }">
+                                    <select class="opt-palette-select" x-model="pid">
+                                      <option value="">— палитра —</option>
+                                      <template x-for="p in dicts.palettes" :key="p.id">
+                                        <option :value="p.id" x-text="p.name + ' (' + p.color_ids.length + ')'"></option>
+                                      </template>
+                                    </select>
+                                    <button type="button" class="opt-btn-sm" :disabled="!pid"
+                                            @click="applyPalette(finishEntry(gradeEntry(mat.id, gr.id), fin.id), pid)">Применить</button>
+                                  </span>
+                                </template>
                               </div>
                               <div style="display:flex;flex-wrap:wrap;gap:8px 24px;">
                                 <template x-for="grp in colorGroups" :key="grp.label">
@@ -198,11 +216,23 @@
                   </label>
                   <template x-if="finishEntry(matEntry(mat.id), fin.id)">
                     <div class="opt-colors">
-                      <div style="display:flex;gap:10px;margin-bottom:6px;">
+                      <div style="display:flex;gap:10px;margin-bottom:6px;align-items:center;flex-wrap:wrap;">
                         <button type="button" class="opt-btn-sm"
                                 @click="setAllColors(finishEntry(matEntry(mat.id), fin.id), true)">Выбрать все цвета</button>
                         <button type="button" class="opt-btn-sm"
                                 @click="setAllColors(finishEntry(matEntry(mat.id), fin.id), false)">Снять все</button>
+                        <template x-if="dicts.palettes && dicts.palettes.length">
+                          <span class="opt-palette-ctl" x-data="{ pid: '' }">
+                            <select class="opt-palette-select" x-model="pid">
+                              <option value="">— палитра —</option>
+                              <template x-for="p in dicts.palettes" :key="p.id">
+                                <option :value="p.id" x-text="p.name + ' (' + p.color_ids.length + ')'"></option>
+                              </template>
+                            </select>
+                            <button type="button" class="opt-btn-sm" :disabled="!pid"
+                                    @click="applyPalette(finishEntry(matEntry(mat.id), fin.id), pid)">Применить</button>
+                          </span>
+                        </template>
                       </div>
                       <div style="display:flex;flex-wrap:wrap;gap:8px 24px;">
                         <template x-for="grp in colorGroups" :key="grp.label">
@@ -268,7 +298,7 @@
 <script>
 function optionsTree() {
   return {
-    dicts: { materials: [], finishes: [], colors: [] },
+    dicts: { materials: [], finishes: [], colors: [], palettes: [] },
     state: [],   // [{material_id, grades:[{grade_id, finishes:[{finish_id, color_ids}]}], finishes:[...]}]
     params: { size: { values: [], custom: false },
               length: { values: [], custom: false },
@@ -349,6 +379,16 @@ function optionsTree() {
     },
     setAllColors(finishEntry, on) {
       finishEntry.color_ids = on ? this.dicts.colors.map(c => c.id) : [];
+    },
+    applyPalette(finishEntry, paletteId) {
+      // Палитра — только шаблон: переносим её цвета на узел, дальше их можно
+      // править вручную. Применение ЗАМЕНЯЕТ текущий набор. Оставляем лишь
+      // цвета, ещё присутствующие в активном справочнике.
+      const pid = parseInt(paletteId, 10);
+      const pal = (this.dicts.palettes || []).find(p => p.id === pid);
+      if (!pal) return;
+      const active = new Set(this.dicts.colors.map(c => c.id));
+      finishEntry.color_ids = pal.color_ids.filter(id => active.has(id));
     },
   };
 }
