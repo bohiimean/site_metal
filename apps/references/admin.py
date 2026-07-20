@@ -51,7 +51,7 @@ class ColorAdmin(ModelAdmin):
 
 @admin.register(ColorPalette)
 class ColorPaletteAdmin(ModelAdmin):
-    list_display  = ['name', 'color_count', 'is_active']
+    list_display  = ['name', 'color_count', 'usage_count', 'is_active']
     list_editable = ['is_active']
     search_fields = ['name']
     filter_horizontal = ['colors']
@@ -59,3 +59,8 @@ class ColorPaletteAdmin(ModelAdmin):
     def color_count(self, obj):
         return obj.colors.count()
     color_count.short_description = 'Цветов'
+
+    def usage_count(self, obj):
+        # Сколько обработок товаров ссылается на палитру — «радиус» правки
+        return obj.option_nodes.count()
+    usage_count.short_description = 'Используется (обработок)'

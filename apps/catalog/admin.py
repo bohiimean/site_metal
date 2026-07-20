@@ -264,6 +264,7 @@ class ProductAdmin(ModelAdmin):
         def finish_entry(node):
             return {
                 'finish_id': node.finish_id,
+                'palette_id': node.palette_id,
                 'color_ids': [c.pk for c in node.colors.all()],
             }
 
@@ -388,6 +389,8 @@ class ProductAdmin(ModelAdmin):
             Finish.objects.filter(is_active=True).values_list('pk', flat=True))
         color_ids = set(
             Color.objects.filter(is_active=True).values_list('pk', flat=True))
+        palette_ids = set(
+            ColorPalette.objects.filter(is_active=True).values_list('pk', flat=True))
 
         keep = set()
 
@@ -409,14 +412,28 @@ class ProductAdmin(ModelAdmin):
             if fid not in finish_ids:
                 return
             node = get_node(parent, 'finish', finish_id=fid)
+            pid = as_int(entry.get('palette_id'))
+            if pid not in palette_ids:
+                pid = None
+            fields = []
             if node.sort_order != order:
                 node.sort_order = order
+                fields.append('sort_order')
+            if node.palette_id != pid:
+                node.palette_id = pid
+                fields.append('palette')
+            if fields:
                 node.save()
-            selected = [
-                c for c in map(as_int, entry.get('color_ids') or [])
-                if c in color_ids
-            ]
-            node.colors.set(selected)
+            # Режим палитры — ручной набор цветов не используется, чистим его,
+            # чтобы он не путал фильтр/фасет и не «оживал» при возврате в ручной
+            if pid:
+                node.colors.clear()
+            else:
+                selected = [
+                    c for c in map(as_int, entry.get('color_ids') or [])
+                    if c in color_ids
+                ]
+                node.colors.set(selected)
 
         for m_order, m_entry in enumerate(desired):
             if not isinstance(m_entry, dict):

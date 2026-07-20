@@ -1,4 +1,5 @@
 import django_filters
+from django.db.models import Q
 
 from apps.references.models import Material, SteelGrade, Finish, Color
 from .models import Product
@@ -12,7 +13,7 @@ class ProductFilter(django_filters.FilterSet):
     )
     color = django_filters.ModelMultipleChoiceFilter(
         queryset=Color.objects.filter(is_active=True),
-        field_name='option_nodes__colors',
+        method='filter_color',
         label='Цвет',
     )
     steel_grade = django_filters.ModelMultipleChoiceFilter(
@@ -56,6 +57,15 @@ class ProductFilter(django_filters.FilterSet):
                 .distinct()
             )
             self.filters[key].extra['choices'] = [(v, v) for v in values]
+
+    def filter_color(self, queryset, name, value):
+        # Цвет доступен, если он в ручном наборе обработки ИЛИ в её палитре
+        if value:
+            return queryset.filter(
+                Q(option_nodes__colors__in=value)
+                | Q(option_nodes__palette__colors__in=value)
+            )
+        return queryset
 
     def filter_param_value(self, queryset, name, value):
         if value:

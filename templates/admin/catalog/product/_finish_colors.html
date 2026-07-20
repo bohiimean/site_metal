@@ -1,0 +1,71 @@
+{% comment %}
+Выбор цветов одной обработки в дереве опций товара.
+Ожидает в Alpine-scope геттер `fe` — запись обработки {finish_id, palette_id, color_ids}.
+Два режима: «Вручную» (галочки color_ids) либо живая палитра (palette_id).
+{% endcomment %}
+<div class="opt-source-row">
+  <span class="opt-label" style="margin:0;">Источник цветов:</span>
+  <select class="opt-palette-select"
+          @change="setFinishSource(fe, $event.target.value)">
+    <option value="" :selected="!fe.palette_id">Вручную</option>
+    <template x-for="p in dicts.palettes" :key="p.id">
+      <option :value="p.id" :selected="fe.palette_id === p.id"
+              x-text="p.name + ' (' + p.color_ids.length + ')'"></option>
+    </template>
+  </select>
+</div>
+
+<!-- Живая палитра: только просмотр, набор меняется в разделе «Палитры цветов» -->
+<template x-if="fe.palette_id">
+  <div class="opt-palette-preview">
+    <p class="opt-count" style="margin:0 0 6px;">
+      Цвета берутся из палитры живьём — правьте набор в разделе «Палитры цветов»,
+      изменение отразится на всех товарах с этой палитрой.</p>
+    <div style="display:flex;flex-wrap:wrap;gap:6px 16px;">
+      <template x-for="c in paletteColorObjs(fe.palette_id)" :key="c.id">
+        <span class="opt-color-item" style="cursor:default;">
+          <span class="opt-swatch" :style="'background:' + (c.hex || '#ccc')"></span>
+          <span x-text="c.name + (c.ral ? ' (' + c.ral + ')' : '')"></span>
+        </span>
+      </template>
+      <span class="opt-count" x-show="!paletteColorObjs(fe.palette_id).length">палитра пуста</span>
+    </div>
+  </div>
+</template>
+
+<!-- Ручной режим: галочки цветов + разовое копирование из палитры -->
+<template x-if="!fe.palette_id">
+  <div>
+    <div style="display:flex;gap:10px;margin-bottom:6px;align-items:center;flex-wrap:wrap;">
+      <button type="button" class="opt-btn-sm" @click="setAllColors(fe, true)">Выбрать все цвета</button>
+      <button type="button" class="opt-btn-sm" @click="setAllColors(fe, false)">Снять все</button>
+      <template x-if="dicts.palettes && dicts.palettes.length">
+        <span class="opt-palette-ctl" x-data="{ pid: '' }">
+          <select class="opt-palette-select" x-model="pid">
+            <option value="">— скопировать из палитры —</option>
+            <template x-for="p in dicts.palettes" :key="p.id">
+              <option :value="p.id" x-text="p.name + ' (' + p.color_ids.length + ')'"></option>
+            </template>
+          </select>
+          <button type="button" class="opt-btn-sm" :disabled="!pid" @click="applyPalette(fe, pid)">Скопировать</button>
+        </span>
+      </template>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px 24px;">
+      <template x-for="grp in colorGroups" :key="grp.label">
+        <div class="opt-color-group">
+          <p class="opt-label" x-text="grp.label"></p>
+          <template x-for="c in grp.colors" :key="c.id">
+            <label class="opt-color-item">
+              <input type="checkbox"
+                     :checked="fe.color_ids.includes(c.id)"
+                     @change="toggleColor(fe, c.id)">
+              <span class="opt-swatch" :style="'background:' + (c.hex || '#ccc')"></span>
+              <span x-text="c.name + (c.ral ? ' (' + c.ral + ')' : '')"></span>
+            </label>
+          </template>
+        </div>
+      </template>
+    </div>
+  </div>
+</template>

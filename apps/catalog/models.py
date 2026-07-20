@@ -406,7 +406,17 @@ class ProductOptionNode(models.Model):
         Color, blank=True,
         related_name='option_nodes',
         verbose_name='Доступные цвета',
-        help_text='Имеет смысл только на узле-обработке',
+        help_text='Ручной набор цветов (используется, если палитра не выбрана). '
+                  'Имеет смысл только на узле-обработке',
+    )
+    palette = models.ForeignKey(
+        'references.ColorPalette', on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='option_nodes',
+        verbose_name='Палитра цветов',
+        help_text='Задана — цвета берутся из палитры живьём: правка палитры '
+                  'меняет все товары с ней. Пусто — берётся ручной набор ниже. '
+                  'Имеет смысл только на узле-обработке.',
     )
     sort_order = models.PositiveIntegerField('Порядок', default=0)
 
@@ -432,6 +442,17 @@ class ProductOptionNode(models.Model):
     def ref(self):
         """Справочный объект узла."""
         return self.material or self.steel_grade or self.finish
+
+    def effective_colors(self):
+        """Активные цвета обработки: живьём из палитры, иначе — ручной набор.
+
+        Живая связь (без глобальных правил и цепочек разрешения): что выбрано
+        на самом узле, то и действует. Отключил цвет в палитре — он пропал у
+        всех обработок, ссылающихся на неё. Палитра выключена целиком →
+        падаем на ручной набор (обычно пустой)."""
+        if self.palette_id and self.palette and self.palette.is_active:
+            return [c for c in self.palette.colors.all() if c.is_active]
+        return [c for c in self.colors.all() if c.is_active]
 
     def clean(self):
         refs = {
@@ -464,6 +485,8 @@ class ProductOptionNode(models.Model):
                 raise ValidationError({'parent': 'Обработка должна висеть под материалом или маркой.'})
         if self.parent_id and self.parent.product_id != self.product_id:
             raise ValidationError({'parent': 'Родительский узел принадлежит другому товару.'})
+        if self.palette_id and self.node_type != 'finish':
+            raise ValidationError({'palette': 'Палитра задаётся только на узле-обработке.'})
 
     def save(self, *args, **kwargs):
         self.full_clean()

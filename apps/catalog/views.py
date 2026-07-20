@@ -72,8 +72,14 @@ def _facet_ctx(request, category=None):
             options = Finish.objects.filter(
                 is_active=True, pk__in=node_qs.values('finish_id'))
         elif key == 'color':
-            options = Color.objects.filter(
-                is_active=True, pk__in=node_qs.values('colors'))
+            # Цвета раздела — объединение ручных наборов и палитр обработок
+            manual_ids = node_qs.filter(
+                colors__is_active=True).values_list('colors', flat=True)
+            palette_color_ids = node_qs.filter(
+                palette__is_active=True, palette__colors__is_active=True,
+            ).values_list('palette__colors', flat=True)
+            ids = set(manual_ids) | set(palette_color_ids)
+            options = Color.objects.filter(is_active=True, pk__in=ids)
         elif key == 'size':
             values = param_qs.filter(kind='size').values_list('value', flat=True).distinct()
             options = [
@@ -284,8 +290,8 @@ def _option_tree(product):
     """
     nodes = list(
         product.option_nodes
-        .select_related('material', 'steel_grade', 'finish')
-        .prefetch_related('colors')
+        .select_related('material', 'steel_grade', 'finish', 'palette')
+        .prefetch_related('colors', 'palette__colors')
         .order_by('sort_order', 'id')
     )
     by_parent = {}
@@ -293,9 +299,7 @@ def _option_tree(product):
         by_parent.setdefault(n.parent_id, []).append(n)
 
     def finish_dict(node):
-        colors = [
-            _color_dict(c) for c in node.colors.all() if c.is_active
-        ]
+        colors = [_color_dict(c) for c in node.effective_colors()]
         colors.sort(key=lambda c: (c['group'], c['name']))
         return {
             'id':       node.id,
