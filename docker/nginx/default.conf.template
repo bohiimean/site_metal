@@ -32,6 +32,15 @@ server {
     gzip_types text/css application/javascript application/json image/svg+xml text/plain;
     gzip_min_length 1024;
 
+    # /favicon.ico запрашивают краулеры (Яндекс/Google) и браузеры по
+    # соглашению, минуя <link rel=icon>. Отдаём напрямую из собранной статики.
+    location = /favicon.ico {
+        alias /app/staticfiles/img/favicon.ico;
+        expires 30d;
+        add_header Cache-Control "public";
+        access_log off;
+    }
+
     # Статика: имена файлов версионируются редко, месяца кэша достаточно
     location /static/ {
         alias /app/staticfiles/;
