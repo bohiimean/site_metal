@@ -30,42 +30,48 @@ NS reg.ru — иначе `dns_regru` не сможет создать TXT-зап
 
 ## 2. Первый запуск
 
-TLS выдаётся через Let's Encrypt по **DNS-01** (reg.ru API): один сертификат
-на оба домена (`DOMAIN` + `REDIRECT_DOMAIN` и их `www`). DNS-01 выбран потому,
-что HTTP-01 на этом хосте не проходит multi-perspective-валидацию LE (внешние
-проверяющие точки не достают сервер) — DNS-01 не требует достучаться до хоста,
-владение доказывается TXT-записью в зоне reg.ru.
+TLS выдаётся через Let's Encrypt по **HTTP-01** нативным `acme.sh` на хосте
+(не контейнером): один сертификат на оба домена (`DOMAIN` + `REDIRECT_DOMAIN`
+и их `www`). Почему так, а не контейнер/DNS-01:
+- Docker Hub с этого хоста хронически отдаёт `429` — образ acme.sh не тянется;
+- DNS-01 через API reg.ru невозможен: зоны на **хостинговом** NS
+  `ns1.hosting.reg.ru`, а API поддерживает только **регистраторский**
+  `ns1.reg.ru` (иначе `DOMAIN_IS_NOT_USE_REGRU_NSS`);
+- HTTP-01 с этого хоста проходит нормально.
 
-Предварительно в кабинете reg.ru: включить **доступ к API**, создать
-**API-пароль** (отдельный, не пароль аккаунта), при необходимости добавить IP
-сервера в белый список. Логин и пароль — в `.env`:
-`REGRU_API_Username`, `REGRU_API_Password`.
+**Важно про IPv6:** у доменов не должно быть `AAAA`-записи на чужой/парковочный
+IPv6, если сервер IPv6 не обслуживает — LE предпочитает IPv6 и валидация уходит
+не на сервер (404). Проверить: `dig +short AAAA <домен>` должно быть пусто.
+Лишние `AAAA` удалить в панели DNS до выпуска.
 
-Сертификат выпускается один раз вручную (nginx без файлов серта не стартует).
-`.рф`-домен указывается в punycode:
+Установка acme.sh (GitHub с хоста доступен) и выпуск серта. `.рф` — в punycode:
 
 ```bash
-# каталог под серт (nginx читает live/${DOMAIN}/)
-docker compose -f docker-compose.prod.yml run --rm --entrypoint sh acme \
-    -c 'mkdir -p /etc/letsencrypt/live/example.ru'
+# acme.sh + собственный cron продления
+curl https://get.acme.sh | sh -s email=admin@example.ru
 
-# выпуск ОДНОГО серта на оба домена (все 4 имени — в SAN)
-docker compose -f docker-compose.prod.yml run --rm acme \
-    --issue --dns dns_regru --server letsencrypt --keylength 2048 \
+# пути docker-volume'ов, куда nginx смотрит за сертом и челленджем
+CERTS=$(docker volume inspect metal_certbot_certs   -f '{{.Mountpoint}}')
+WEBROOT=$(docker volume inspect metal_certbot_webroot -f '{{.Mountpoint}}')
+
+# выпуск ОДНОГО серта на оба домена (все 4 имени — в SAN), HTTP-01 через webroot
+/root/.acme.sh/acme.sh --issue --server letsencrypt --keylength 2048 \
+    -w "$WEBROOT" \
     -d example.ru -d www.example.ru \
     -d xn--80aejuogkn.xn--p1ai -d www.xn--80aejuogkn.xn--p1ai
 
-# установка серта в volume, откуда его читает nginx
-docker compose -f docker-compose.prod.yml run --rm acme \
-    --install-cert -d example.ru \
-    --fullchain-file /etc/letsencrypt/live/example.ru/fullchain.pem \
-    --key-file       /etc/letsencrypt/live/example.ru/privkey.pem
+# установка серта в volume (nginx читает live/${DOMAIN}/) + reload nginx.
+# acme.sh запоминает эти параметры и переприменяет их при автопродлении.
+/root/.acme.sh/acme.sh --install-cert -d example.ru \
+    --fullchain-file "$CERTS/live/example.ru/fullchain.pem" \
+    --key-file       "$CERTS/live/example.ru/privkey.pem" \
+    --reloadcmd "docker compose -f /opt/metal/docker-compose.prod.yml exec -T nginx nginx -s reload"
 ```
 
-Параметры `--install-cert` acme.sh запоминает и переприменяет при каждом
-автопродлении — файлы в volume обновляются сами, отдельно переустанавливать
-не нужно. Сервис `acme` (`command: daemon`) после `up -d` крутит внутренний
-crond и продлевает серт автоматически.
+Продление полностью автоматическое: `acme.sh` ставит cron на хост при установке,
+раз в сутки проверяет срок, продлевает через тот же webroot, переустанавливает
+серт в volume и перезагружает nginx (`--reloadcmd`). Отдельный контейнер и
+host-cron `nginx -s reload` из п.4 больше не нужны.
 
 Дальше — весь стек (миграции и collectstatic выполняются автоматически
 в `start-prod.sh`):
@@ -117,9 +123,10 @@ Cron (`crontab -e` от root):
 ```cron
 # Ночной бэкап media + БД
 0 3 * * * /opt/metal/docker/backup.sh >> /var/log/metal-backup.log 2>&1
-# Перечитать серт после возможного продления (acme.sh-daemon продлевает сам)
-30 4 * * 1 docker compose -f /opt/metal/docker-compose.prod.yml exec nginx nginx -s reload
 ```
+
+Продление TLS-серта отдельным cron не нужно — `acme.sh` завёл свой cron при
+установке и сам продлевает + перезагружает nginx (см. п.2).
 
 Восстановление после потери сервера: поднять новый сервер по шагам 1–2,
 затем `rclone sync s3backup:metal-backup/media` в volume и
@@ -164,9 +171,9 @@ Cron (`crontab -e` от root):
 
 ### TLS через сертификат провайдера (ручной запасной вариант)
 
-Основной путь — Let's Encrypt по DNS-01 (см. п.2): работает даже когда HTTP-01
-не проходит из-за маршрутизации, и продлевается сам. Ручной серт провайдера —
-только на случай, если DNS-01 недоступен (напр. зона не на NS reg.ru).
+Основной путь — Let's Encrypt по HTTP-01 через нативный `acme.sh` (см. п.2):
+продлевается сам. Ручной серт провайдера — только на случай, если и HTTP-01
+недоступен (напр. LE вообще не достаёт хост).
 **Такой серт не продлевается автоматически — придётся перевыпускать вручную
 до истечения срока.** DV-сертификат провайдера (reg.ru и т.п.):
 
@@ -180,5 +187,5 @@ docker run --rm -v metal_certbot_certs:/le -v "$PWD":/in nginx:1.27-alpine sh -c
 docker compose -f docker-compose.prod.yml up -d
 ```
 
-При таком варианте сервис `acme` не нужен (серт кладётся в volume руками) —
+При таком варианте `acme.sh` не нужен (серт кладётся в volume руками) —
 не забудьте перевыпустить его до истечения срока.

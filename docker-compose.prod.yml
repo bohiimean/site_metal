@@ -74,32 +74,20 @@ services:
     depends_on:
       - web
 
-  # Выпуск и автопродление TLS через Let's Encrypt по DNS-01 (reg.ru API).
-  # DNS-01 не требует, чтобы LE достучался до хоста извне (на этом хосте
-  # HTTP-01 не проходил multi-perspective-валидацию) — владение доменом
-  # доказывается TXT-записью в зоне reg.ru. Один серт покрывает оба домена
-  # (DOMAIN + REDIRECT_DOMAIN и их www) через SAN.
-  # Первый выпуск — один раз вручную (см. DEPLOY.md, п.2); дальше daemon сам
-  # продлевает (crond внутри контейнера) и переустанавливает серт в volume.
-  # nginx перечитывает конфиг по host-cron (см. DEPLOY.md, п.4).
-  acme:
-    image: neilpang/acme.sh
-    restart: unless-stopped
-    command: daemon
-    environment:
-      REGRU_API_Username: ${REGRU_API_Username:?REGRU_API_Username обязателен в .env}
-      REGRU_API_Password: ${REGRU_API_Password:?REGRU_API_Password обязателен в .env}
-    volumes:
-      - acme_data:/acme.sh
-      - certbot_certs:/etc/letsencrypt
+  # TLS-серт (Let's Encrypt) выпускается и продлевается НЕ контейнером, а
+  # нативным acme.sh на хосте (HTTP-01 через webroot этого nginx). Причина:
+  # Docker Hub на этом хосте хронически отдаёт 429, а DNS-01 через reg.ru API
+  # невозможен — зоны на хостинговом NS (ns1.hosting.reg.ru), а не на
+  # регистраторском (ns1.reg.ru), который единственный поддерживает API.
+  # acme.sh ставит собственный cron, кладёт серт в volume certbot_certs и
+  # перезагружает nginx через --reloadcmd. Полностью: см. DEPLOY.md, п.2.
 
 volumes:
   postgres_data:
   media_data:
   static_data:
+  # Серты Let's Encrypt: пишет нативный acme.sh (live/<DOMAIN>/), читает nginx
   certbot_certs:
-  # Челлендж-webroot больше не нужен для DNS-01, но nginx его монтирует (ro)
-  # и держит HTTP-01-fallback location — оставлен, чтобы не менять монтирование.
+  # Webroot для HTTP-01-челленджа: nginx отдаёт /.well-known/acme-challenge/,
+  # acme.sh кладёт туда токены при выпуске/продлении
   certbot_webroot:
-  # Состояние acme.sh (аккаунт LE, сохранённые параметры issue/install-cert)
-  acme_data:
