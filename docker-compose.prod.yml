@@ -62,6 +62,9 @@ services:
       - "443:443"
     environment:
       DOMAIN: ${DOMAIN:?DOMAIN обязателен в .env}
+      # Второй домен-редиректор в punycode (напр. xn--80aejuogkn.xn--p1ai).
+      # Пусто = второй домен выключен (см. default.conf.template).
+      REDIRECT_DOMAIN: ${REDIRECT_DOMAIN:-}
     volumes:
       - ./docker/nginx/default.conf.template:/etc/nginx/templates/default.conf.template:ro
       - static_data:/app/staticfiles:ro
@@ -71,25 +74,32 @@ services:
     depends_on:
       - web
 
-  # Продление сертификата каждые 12 часов (выпускается он один раз
-  # вручную — см. DEPLOY.md). После продления nginx нужно перечитать
-  # конфиг: cron на хосте делает `nginx -s reload` (см. DEPLOY.md).
-  certbot:
-    image: certbot/certbot
+  # Выпуск и автопродление TLS через Let's Encrypt по DNS-01 (reg.ru API).
+  # DNS-01 не требует, чтобы LE достучался до хоста извне (на этом хосте
+  # HTTP-01 не проходил multi-perspective-валидацию) — владение доменом
+  # доказывается TXT-записью в зоне reg.ru. Один серт покрывает оба домена
+  # (DOMAIN + REDIRECT_DOMAIN и их www) через SAN.
+  # Первый выпуск — один раз вручную (см. DEPLOY.md, п.2); дальше daemon сам
+  # продлевает (crond внутри контейнера) и переустанавливает серт в volume.
+  # nginx перечитывает конфиг по host-cron (см. DEPLOY.md, п.4).
+  acme:
+    image: neilpang/acme.sh
     restart: unless-stopped
+    command: daemon
+    environment:
+      REGRU_API_Username: ${REGRU_API_Username:?REGRU_API_Username обязателен в .env}
+      REGRU_API_Password: ${REGRU_API_Password:?REGRU_API_Password обязателен в .env}
     volumes:
+      - acme_data:/acme.sh
       - certbot_certs:/etc/letsencrypt
-      - certbot_webroot:/var/www/certbot
-    entrypoint: >
-      sh -c 'trap exit TERM;
-             while :; do
-               certbot renew --webroot -w /var/www/certbot --quiet;
-               sleep 12h & wait $${!};
-             done'
 
 volumes:
   postgres_data:
   media_data:
   static_data:
   certbot_certs:
+  # Челлендж-webroot больше не нужен для DNS-01, но nginx его монтирует (ro)
+  # и держит HTTP-01-fallback location — оставлен, чтобы не менять монтирование.
   certbot_webroot:
+  # Состояние acme.sh (аккаунт LE, сохранённые параметры issue/install-cert)
+  acme_data:

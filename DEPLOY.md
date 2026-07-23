@@ -22,19 +22,50 @@ nano .env   # заполнить: SECRET_KEY, ALLOWED_HOSTS, SITE_URL, DOMAIN,
             # DB_PASSWORD, TELEGRAM_*, ключи капчи
 ```
 
-DNS: A-записи `example.ru` и `www.example.ru` должны указывать на сервер
-**до** выпуска сертификата.
+DNS: A-записи обоих доменов и их `www` (`example.ru`, `www.example.ru`,
+`арвенокс.рф`, `www.арвенокс.рф`) должны указывать на сервер, чтобы сайт и
+301-редирект второго домена работали. Для **выпуска** серта по DNS-01 A-записи
+не обязательны (LE проверяет только TXT), но зоны должны быть делегированы на
+NS reg.ru — иначе `dns_regru` не сможет создать TXT-запись.
 
 ## 2. Первый запуск
 
-Сертификат выпускается один раз вручную (nginx без него не стартует):
+TLS выдаётся через Let's Encrypt по **DNS-01** (reg.ru API): один сертификат
+на оба домена (`DOMAIN` + `REDIRECT_DOMAIN` и их `www`). DNS-01 выбран потому,
+что HTTP-01 на этом хосте не проходит multi-perspective-валидацию LE (внешние
+проверяющие точки не достают сервер) — DNS-01 не требует достучаться до хоста,
+владение доказывается TXT-записью в зоне reg.ru.
+
+Предварительно в кабинете reg.ru: включить **доступ к API**, создать
+**API-пароль** (отдельный, не пароль аккаунта), при необходимости добавить IP
+сервера в белый список. Логин и пароль — в `.env`:
+`REGRU_API_Username`, `REGRU_API_Password`.
+
+Сертификат выпускается один раз вручную (nginx без файлов серта не стартует).
+`.рф`-домен указывается в punycode:
 
 ```bash
-docker compose -f docker-compose.prod.yml run --rm -p 80:80 \
-    --entrypoint "certbot certonly --standalone \
+# каталог под серт (nginx читает live/${DOMAIN}/)
+docker compose -f docker-compose.prod.yml run --rm --entrypoint sh acme \
+    -c 'mkdir -p /etc/letsencrypt/live/example.ru'
+
+# выпуск ОДНОГО серта на оба домена (все 4 имени — в SAN)
+docker compose -f docker-compose.prod.yml run --rm acme \
+    --issue --dns dns_regru --server letsencrypt --keylength 2048 \
     -d example.ru -d www.example.ru \
-    --email admin@example.ru --agree-tos --no-eff-email" certbot
+    -d xn--80aejuogkn.xn--p1ai -d www.xn--80aejuogkn.xn--p1ai
+
+# установка серта в volume, откуда его читает nginx
+docker compose -f docker-compose.prod.yml run --rm acme \
+    --install-cert -d example.ru \
+    --fullchain-file /etc/letsencrypt/live/example.ru/fullchain.pem \
+    --key-file       /etc/letsencrypt/live/example.ru/privkey.pem
 ```
+
+Параметры `--install-cert` acme.sh запоминает и переприменяет при каждом
+автопродлении — файлы в volume обновляются сами, отдельно переустанавливать
+не нужно. Сервис `acme` (`command: daemon`) после `up -d` крутит внутренний
+crond и продлевает серт автоматически.
 
 Дальше — весь стек (миграции и collectstatic выполняются автоматически
 в `start-prod.sh`):
@@ -86,7 +117,7 @@ Cron (`crontab -e` от root):
 ```cron
 # Ночной бэкап media + БД
 0 3 * * * /opt/metal/docker/backup.sh >> /var/log/metal-backup.log 2>&1
-# Перечитать сертификат после возможного продления (certbot продлевает сам)
+# Перечитать серт после возможного продления (acme.sh-daemon продлевает сам)
 30 4 * * 1 docker compose -f /opt/metal/docker-compose.prod.yml exec nginx nginx -s reload
 ```
 
@@ -131,10 +162,13 @@ Cron (`crontab -e` от root):
 `git pull && docker compose -f docker-compose.prod.yml up -d --build` не
 конфликтует (бинарник Tailwind — неотслеживаемый, зеркало зашито в Dockerfile).
 
-### TLS через сертификат провайдера (вместо Let's Encrypt)
+### TLS через сертификат провайдера (ручной запасной вариант)
 
-Если Let's Encrypt не проходит (напр. multi-perspective валидация не достаёт
-хост из-за маршрутизации) — используйте DV-сертификат провайдера (reg.ru и т.п.):
+Основной путь — Let's Encrypt по DNS-01 (см. п.2): работает даже когда HTTP-01
+не проходит из-за маршрутизации, и продлевается сам. Ручной серт провайдера —
+только на случай, если DNS-01 недоступен (напр. зона не на NS reg.ru).
+**Такой серт не продлевается автоматически — придётся перевыпускать вручную
+до истечения срока.** DV-сертификат провайдера (reg.ru и т.п.):
 
 ```bash
 # fullchain = сертификат + цепочка (leaf первым), privkey = приватный ключ
@@ -146,5 +180,5 @@ docker run --rm -v metal_certbot_certs:/le -v "$PWD":/in nginx:1.27-alpine sh -c
 docker compose -f docker-compose.prod.yml up -d
 ```
 
-Такой серт **не продлевается автоматически** (certbot-контейнер его не трогает) —
-перевыпускать вручную до истечения срока.
+При таком варианте сервис `acme` не нужен (серт кладётся в volume руками) —
+не забудьте перевыпустить его до истечения срока.

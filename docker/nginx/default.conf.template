@@ -66,3 +66,40 @@ server {
         proxy_redirect off;
     }
 }
+
+# ── Второй домен (напр. арвенокс.рф → xn--80aejuogkn.xn--p1ai) ──
+# Только 301-редирект на основной ${DOMAIN}: сайт индексируется под одним
+# доменом, вес не дробится. Блоки активны, только если в .env задан
+# ${REDIRECT_DOMAIN}; при пустом значении envsubst оставит server_name
+# пустым — блок просто ни на что не матчится. Сертификат тут ОБЩИЙ с
+# основным доменом (${DOMAIN}): оба домена входят в SAN одного LE-серта
+# (см. DEPLOY.md, п.2), поэтому файл серта существует всегда и nginx
+# стартует даже при пустом ${REDIRECT_DOMAIN}.
+
+# HTTP второго домена: ACME-челлендж + редирект на HTTPS основного домена
+server {
+    listen 80;
+    server_name ${REDIRECT_DOMAIN} www.${REDIRECT_DOMAIN};
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 301 https://${DOMAIN}$request_uri;
+    }
+}
+
+# HTTPS второго домена: общий с основным доменом серт (браузер проверяет его
+# ДО редиректа; второй домен входит в SAN), затем 301 на основной домен
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name ${REDIRECT_DOMAIN} www.${REDIRECT_DOMAIN};
+
+    ssl_certificate     /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+
+    return 301 https://${DOMAIN}$request_uri;
+}
