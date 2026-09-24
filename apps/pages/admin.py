@@ -11,12 +11,15 @@ class SiteSettingsAdmin(ModelAdmin):
     сразу редактирование единственной записи."""
 
     fieldsets = [
+        ('Тексты витрины', {'fields': [
+            'price_label', 'price_label_short', 'price_note', 'card_button_text',
+        ]}),
         ('Промо-баннер 1 (тёмный)', {'fields': [
-            'banner1_enabled', 'banner1_title',
+            'banner1_enabled', 'banner1_title', 'banner1_subtitle',
             'banner1_button_text', 'banner1_button_url',
         ]}),
         ('Промо-баннер 2 (акцентный)', {'fields': [
-            'banner2_enabled', 'banner2_title',
+            'banner2_enabled', 'banner2_title', 'banner2_subtitle',
             'banner2_button_text', 'banner2_button_url',
         ]}),
         ('Футер', {'fields': ['footer_copyright', 'footer_legal']}),
