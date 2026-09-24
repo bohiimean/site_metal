@@ -37,9 +37,11 @@
 
     <div class="flex items-center justify-between gap-2 mt-auto pt-2">
       <span class="text-[12px] font-semibold text-muted whitespace-nowrap"><span class="hidden sm:inline">{{ site.price_label }}</span><span class="sm:hidden">{{ site.price_label_short }}</span></span>
-      {# Ведёт на страницу товара, а не кладёт в корзину: из сетки исполнение
-         (материал, обработка, цвет, размер) неизвестно, и менеджер получал
-         бы заявку без параметров. #}
+      {% comment %}
+      Ведёт на страницу товара, а не кладёт в корзину: из сетки исполнение
+      (материал, обработка, цвет, размер) неизвестно, и менеджер получал бы
+      заявку без параметров.
+      {% endcomment %}
       <a href="{% url 'catalog:detail' product.slug %}"
          class="btn-accent text-[10px] px-3 py-2 shrink-0">
         {{ site.card_button_text }}
