@@ -12,7 +12,14 @@
       </svg>
       Фильтры
     </button>
-    <select name="sort" form="filter-form"
+    {# Селект лежит вне формы фильтров, поэтому запрос шлёт сам: change от
+       элемента, привязанного через form="...", до формы не всплывает. #}
+    <select name="sort"
+            hx-get="{{ request.path }}"
+            hx-target="#product-grid-section"
+            hx-trigger="change"
+            hx-include="#filter-form"
+            hx-push-url="true"
             class="text-[12px] border border-border rounded px-3 py-1.5 bg-surface text-primary cursor-pointer">
       <option value="new"  {% if sort == 'new'  %}selected{% endif %}>По новизне</option>
       <option value="name" {% if sort == 'name' %}selected{% endif %}>По названию</option>
@@ -31,17 +38,4 @@
   {% endfor %}
 </div>
 
-{% if page_obj.has_next %}
-<div class="mt-8 text-center">
-  <button
-    hx-get="?page={{ page_obj.next_page_number }}"
-    hx-target="#product-list"
-    hx-swap="beforeend"
-    hx-include="#filter-form"
-    hx-indicator="#load-indicator"
-    class="btn-outline">
-    Показать ещё
-  </button>
-  <span id="load-indicator" class="htmx-indicator ml-3 text-[12px] text-muted">Загрузка…</span>
-</div>
-{% endif %}
+{% include "catalog/_load_more.html" with target="#product-list" include="#filter-form" %}

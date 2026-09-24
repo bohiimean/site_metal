@@ -1,6 +1,6 @@
 import json
 
-from django.core.paginator import Paginator
+from django.core.paginator import Page, Paginator
 from django.db.models import Q
 from django.http import Http404
 from django.shortcuts import render
@@ -33,6 +33,23 @@ DEFAULT_FACET_KEYS = ['material', 'steel_grade', 'finish', 'in_stock']
 def _product_qs():
     """Базовый QuerySet товаров с нужными join-ами."""
     return Product.objects.for_cards()
+
+
+def _paginate(request, products, is_htmx):
+    """Страница выдачи для каталога и поиска.
+
+    Номер за пределами диапазона в htmx-догрузке отдаёт пустую страницу:
+    Paginator.get_page() вернул бы последнюю, и кнопка «Показать ещё»
+    бесконечно повторяла бы хвост выдачи.
+    """
+    paginator = Paginator(products, PAGE_SIZE)
+    try:
+        page_num = int(request.GET.get('page', 1))
+    except (ValueError, TypeError):
+        page_num = 1
+    if is_htmx and not 1 <= page_num <= paginator.num_pages:
+        return Page([], page_num, paginator), paginator
+    return paginator.get_page(page_num), paginator
 
 
 def _facet_config(category):
@@ -123,15 +140,10 @@ def search_view(request):
     sort = request.GET.get('sort', 'new')
     products = products.order_by(*SORT_MAP.get(sort, DEFAULT_SORT))
 
-    paginator = Paginator(products, PAGE_SIZE)
-    try:
-        page_num = int(request.GET.get('page', 1))
-    except (ValueError, TypeError):
-        page_num = 1
-    page_obj = paginator.get_page(page_num)
+    is_htmx = request.headers.get('HX-Request') == 'true'
+    page_obj, paginator = _paginate(request, products, is_htmx)
 
     suggestions = Category.objects.filter(is_active=True, depth=1).order_by('path')[:3]
-    is_htmx = request.headers.get('HX-Request') == 'true'
 
     ctx = {
         'q': q,
@@ -143,8 +155,8 @@ def search_view(request):
         **_facet_ctx(request),
     }
 
-    if is_htmx and page_num > 1:
-        return render(request, 'catalog/_product_cards.html', ctx)
+    if is_htmx and page_obj.number > 1:
+        return render(request, 'catalog/_search_cards.html', ctx)
     if is_htmx:
         return render(request, 'catalog/_search_grid.html', ctx)
     return render(request, 'catalog/search.html', ctx)
@@ -193,14 +205,8 @@ def _render_catalog(request, category):
     sort = request.GET.get('sort', 'new')
     products = products.order_by(*SORT_MAP.get(sort, DEFAULT_SORT))
 
-    paginator = Paginator(products, PAGE_SIZE)
-    try:
-        page_num = int(request.GET.get('page', 1))
-    except (ValueError, TypeError):
-        page_num = 1
-    page_obj = paginator.get_page(page_num)
-
     is_htmx = request.headers.get('HX-Request') == 'true'
+    page_obj, paginator = _paginate(request, products, is_htmx)
 
     ctx = {
         'page_obj':          page_obj,
@@ -212,7 +218,7 @@ def _render_catalog(request, category):
         **_facet_ctx(request, category),
     }
 
-    if is_htmx and page_num > 1:
+    if is_htmx and page_obj.number > 1:
         return render(request, 'catalog/_product_cards.html', ctx)
     if is_htmx:
         return render(request, 'catalog/_product_grid.html', ctx)

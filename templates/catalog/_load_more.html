@@ -1,0 +1,27 @@
+{% comment %}
+Кнопка «Показать ещё» + строка о конце выдачи.
+
+Отдаётся дважды: в составе сетки и внутри фрагмента догрузки с oob=True.
+Второе обязательно — иначе кнопка остаётся с номером первой догруженной
+страницы и на последней странице не исчезает (htmx подставляет только
+карточки, саму кнопку не перерисовывает).
+
+Параметры: page_obj, paginator, sort, target (id сетки), include (форма
+фильтров), oob (True во фрагменте догрузки).
+{% endcomment %}
+<div id="load-more" {% if oob %}hx-swap-oob="outerHTML"{% endif %} class="mt-8 text-center">
+  {% if page_obj.has_next %}
+    <button
+      hx-get="{{ request.path }}?page={{ page_obj.next_page_number }}&amp;sort={{ sort }}"
+      hx-target="{{ target }}"
+      hx-swap="beforeend"
+      hx-include="{{ include }}"
+      hx-indicator="#load-indicator"
+      class="btn-outline">
+      Показать ещё
+    </button>
+    <span id="load-indicator" class="htmx-indicator ml-3 text-[12px] text-muted">Загрузка…</span>
+  {% elif paginator.num_pages > 1 %}
+    <p class="text-[12.5px] text-muted">Вы просмотрели все товары</p>
+  {% endif %}
+</div>

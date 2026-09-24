@@ -10,7 +10,13 @@
     {% endif %}
   </p>
   {% if page_obj.object_list %}
-    <select name="sort" form="search-form"
+    {# Как и в каталоге: селект вне формы, поэтому шлёт запрос сам #}
+    <select name="sort"
+            hx-get="{{ request.path }}"
+            hx-target="#search-grid-section"
+            hx-trigger="change"
+            hx-include="#search-form"
+            hx-push-url="true"
             class="text-[12px] border border-border rounded px-3 py-1.5 bg-surface text-primary cursor-pointer">
       <option value="new"  {% if sort == 'new'  %}selected{% endif %}>По новизне</option>
       <option value="name" {% if sort == 'name' %}selected{% endif %}>По названию</option>
@@ -26,24 +32,7 @@
     {% endfor %}
   </div>
 
-  {% if page_obj.has_next %}
-    <div class="mt-8 text-center">
-      <button
-        hx-get="/search/?page={{ page_obj.next_page_number }}"
-        hx-target="#search-product-list"
-        hx-swap="beforeend"
-        hx-include="#search-form"
-        hx-indicator="#search-load-indicator"
-        class="btn-outline">
-        Показать ещё
-      </button>
-      <span id="search-load-indicator" class="htmx-indicator ml-3 text-[12px] text-muted">Загрузка…</span>
-    </div>
-  {% else %}
-    {% if paginator.num_pages > 1 %}
-      <p class="mt-8 text-center text-[12.5px] text-muted">Вы просмотрели все товары</p>
-    {% endif %}
-  {% endif %}
+  {% include "catalog/_load_more.html" with target="#search-product-list" include="#search-form" %}
 
 {% else %}
 
