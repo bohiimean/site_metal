@@ -415,4 +415,5 @@ def _product_detail(request, product):
         'params_json':       params,
         'photo_rules_json':  _photo_rules(product),
         'schema_org':        _schema_org(request, product, images),
+        'related_products':  product.get_related(),
     })

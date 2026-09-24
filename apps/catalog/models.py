@@ -91,6 +91,10 @@ class CategoryFacet(models.Model):
         return f'{self.category} — {self.get_facet_display()}'
 
 
+# Сколько карточек показывать в блоке «С этим также покупают»
+RELATED_LIMIT = 4
+
+
 class ProductQuerySet(models.QuerySet):
     def for_cards(self):
         """QuerySet для сетки карточек: с первым фото и материалами (подпись)."""
@@ -158,6 +162,11 @@ class Product(models.Model):
         'Своя высота', default=False,
         help_text='Аналогично — поле «Своя высота»',
     )
+    hide_related = models.BooleanField(
+        'Скрыть блок «С этим также покупают»', default=False,
+        help_text='Блока не будет на этом товаре — даже если подборка задана '
+                  'или в категории есть другие товары.',
+    )
     seo_title = models.CharField('SEO Title', max_length=200, blank=True)
     seo_description = models.TextField('SEO Description', blank=True)
     is_active = models.BooleanField('Активен', default=True)
@@ -187,6 +196,103 @@ class Product(models.Model):
 
     def get_first_image(self):
         return self.images.gallery_first().first()
+
+    def get_related(self, limit=RELATED_LIMIT):
+        """Товары для блока «С этим также покупают».
+
+        Ручная подборка (ProductRelation) — главная и всегда побеждает целиком.
+        Пусто — добираем автоматически, чтобы блок работал сразу, не дожидаясь,
+        пока менеджер пройдёт по всему каталогу: сначала своя категория, затем
+        соседи по родительскому разделу, затем остальной каталог (популярные
+        вперёд). Одной своей категории мало: разделы бывают из одного товара.
+
+        Флаг hide_related убирает блок совсем. Неактивные товары отсеиваются
+        сами — for_cards() фильтрует is_active.
+        """
+        if self.hide_related:
+            return []
+
+        ids = list(
+            ProductRelation.objects
+            .filter(product=self)
+            .order_by('position', 'id')
+            .values_list('related_id', flat=True)[:limit]
+        )
+        if ids:
+            by_id = Product.objects.for_cards().in_bulk(ids)
+            # Порядок — как задал менеджер; выпавшие (неактивные) пропускаем
+            manual = [by_id[pk] for pk in ids if pk in by_id]
+            if manual:
+                return manual
+
+        picked, seen = [], {self.pk}
+
+        def take(qs):
+            if len(picked) >= limit:
+                return
+            for product in qs.exclude(pk__in=seen)[:limit - len(picked)]:
+                picked.append(product)
+                seen.add(product.pk)
+
+        # Тот же порядок, что и дефолтная сортировка каталога
+        # (SORT_MAP['new'] в views): сначала популярные
+        base = Product.objects.for_cards().order_by(
+            '-is_featured', 'featured_order', '-created_at')
+
+        if self.category_id:
+            take(base.filter(category_id=self.category_id))
+            parent = self.category.get_parent()
+            if parent:
+                sibling_ids = [c.pk for c in parent.get_descendants(include_self=True)]
+                take(base.filter(category_id__in=sibling_ids))
+        take(base)
+        return picked
+
+
+class ProductRelation(models.Model):
+    """Ручная подборка «С этим также покупают»: что показывать и в каком порядке.
+
+    Связь односторонняя: добавили B к товару A — B появится на карточке A,
+    но не наоборот. Так у каждого товара своя подборка, а не общий «клубок».
+    Порядок — position, правится перетаскиванием в админке.
+    """
+    product = models.ForeignKey(
+        Product, on_delete=models.CASCADE,
+        related_name='related_links',
+        verbose_name='Товар',
+    )
+    related = models.ForeignKey(
+        Product, on_delete=models.CASCADE,
+        related_name='related_to',
+        verbose_name='Рекомендуемый товар',
+    )
+    position = models.PositiveIntegerField('Позиция', default=0)
+
+    class Meta:
+        verbose_name = 'Рекомендуемый товар'
+        verbose_name_plural = 'С этим также покупают'
+        ordering = ['position', 'id']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['product', 'related'],
+                name='uniq_product_relation',
+                violation_error_message='Этот товар уже есть в подборке.',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.product} → {self.related}'
+
+    def clean(self):
+        super().clean()
+        if self.related_id and self.related_id == self.product_id:
+            raise ValidationError({
+                'related': 'Товар нельзя рекомендовать сам к себе.',
+            })
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
 
 
 class ProductImageQuerySet(models.QuerySet):

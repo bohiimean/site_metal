@@ -13,7 +13,7 @@ from treebeard.forms import movenodeform_factory
 from apps.references.models import Material, SteelGrade, Finish, Color, ColorPalette
 from .models import (
     Category, CategoryFacet, Product, ProductImage,
-    ProductOptionNode, ProductParamValue,
+    ProductOptionNode, ProductParamValue, ProductRelation,
 )
 
 
@@ -138,6 +138,19 @@ class ProductImageInline(TabularInline):
     thumb_preview.short_description = 'Превью'
 
 
+class ProductRelationInline(TabularInline):
+    model = ProductRelation
+    fk_name = 'product'   # у модели два FK на Product — указываем явно
+    extra = 0
+    fields = ['related', 'position']
+    autocomplete_fields = ['related']
+    ordering_field = 'position'
+    verbose_name_plural = (
+        'С этим также покупают (пусто — показываются другие товары этой же '
+        'категории; порядок задаётся перетаскиванием строк)'
+    )
+
+
 @admin.register(Product)
 class ProductAdmin(ModelAdmin):
     change_form_template = 'admin/catalog/product/change_form.html'
@@ -149,7 +162,7 @@ class ProductAdmin(ModelAdmin):
     search_fields = ['name', 'slug', 'profile_code']
     prepopulated_fields = {'slug': ('name',)}
     autocomplete_fields = ['category']
-    inlines = [ProductImageInline]
+    inlines = [ProductImageInline, ProductRelationInline]
     # Популярные — сверху и в админском списке; порядок между ними — featured_order
     ordering = ['-is_featured', 'featured_order', '-created_at']
     actions_list = ['reorder_featured']
@@ -193,7 +206,7 @@ class ProductAdmin(ModelAdmin):
     # в секции «Дерево опций» на странице товара, не отдельными полями
     fieldsets = [
         (None, {'fields': ['name', 'slug', 'category', 'profile_code',
-                           'in_stock', 'is_new', 'is_active']}),
+                           'in_stock', 'is_new', 'is_active', 'hide_related']}),
         ('Описание', {'fields': ['description']}),
         ('SEO', {'classes': ['collapse'], 'fields': ['seo_title', 'seo_description']}),
     ]

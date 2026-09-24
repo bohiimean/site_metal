@@ -385,6 +385,22 @@
     </div>
   </div>
 
+  {% if related_products %}
+    <section class="mt-14 border-t border-border pt-9">
+      <h2 class="text-[18px] font-bold text-primary mb-5">С этим также покупают</h2>
+      {% comment %}
+      Подборка задаётся на товаре в админке; пусто — берутся товары той же
+      категории. В цикле переменная product перекрывает текущий товар только
+      внутри блока — карточке нужна именно она.
+      {% endcomment %}
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        {% for product in related_products %}
+          {% include "catalog/_product_card.html" %}
+        {% endfor %}
+      </div>
+    </section>
+  {% endif %}
+
   <!-- ─── Просмотр фото: во весь экран ─── -->
   <!-- Раньше это была модалка шириной 640px — при фото в блоке 520px
        увеличение выходило ~1.2×, «то же самое». Пресет zoom (2000px по
