@@ -49,6 +49,22 @@
   {% include "partials/_cart_drawer.html" %}
   {% include "partials/_callback_modal.html" %}
 
+  <!-- Наверх. z-index ниже дровера корзины (85) и модалок (100), чтобы
+       кнопка не висела поверх открытой панели -->
+  <button x-data="{ shown: false }"
+          x-show="shown" x-cloak x-transition.opacity
+          @scroll.window="shown = window.scrollY > 600"
+          @click="window.scrollTo({ top: 0, behavior: 'smooth' })"
+          title="Наверх" aria-label="Наверх"
+          class="fixed bottom-5 right-5 z-[70] w-10 h-10 flex items-center justify-center
+                 rounded-full bg-surface border border-border-strong shadow-md
+                 text-muted hover:text-accent hover:border-accent transition-colors">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+      <path d="M12 19V5M5 12l7-7 7 7" stroke="currentColor" stroke-width="2.2"
+            stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+  </button>
+
   <!-- Alpine.js -->
   <script>
     // Маска телефона: +7 (999) 123-45-67. Ведущие 8/7 приводятся к +7.
