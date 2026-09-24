@@ -34,6 +34,15 @@
     <span class="text-primary">{{ product.name }}</span>
   </nav>
 
+  <!-- Название — над обеими колонками: заголовок в правой колонке
+       перевешивал вёрстку вправо, а на мобиле уезжал под фото -->
+  <div class="mb-6">
+    <h1 class="text-[26px] font-bold text-primary leading-[1.3] mb-1.5">{{ product.name }}</h1>
+    {% if product.profile_code %}
+      <p class="text-[12px] text-muted">{{ product.profile_code }}</p>
+    {% endif %}
+  </div>
+
   <div class="grid grid-cols-1 lg:grid-cols-[520px_1fr] gap-11">
 
     <!-- ─── Изображения ─── -->
@@ -73,13 +82,6 @@
             </svg>
           </button>
         </template>
-
-        <!-- Подпись поверх фото (на подложке — фон может быть светлым) -->
-        <div class="absolute bottom-2 left-2 right-2 pointer-events-none">
-          <span x-show="photoCaption" x-cloak
-                class="inline-block text-[10px] font-mono text-muted bg-surface/80 backdrop-blur px-2 py-1 rounded-sm"
-                x-text="photoCaption"></span>
-        </div>
       </div>
 
       <!-- Миниатюры галереи -->
@@ -101,22 +103,14 @@
     <!-- ─── Информация о товаре ─── -->
     <div class="flex flex-col gap-[22px]">
 
-      <!-- Название -->
-      <div>
-        <h1 class="text-[26px] font-bold text-primary leading-[1.3] mb-2.5">{{ product.name }}</h1>
-        {% if product.profile_code %}
-          <p class="text-[12px] text-muted">{{ product.profile_code }}</p>
-        {% endif %}
-      </div>
-
       <!-- Цена по запросу + наличие -->
       <div>
         <div class="flex items-baseline gap-2.5">
-          <span class="text-[22px] font-black text-primary leading-none">Цена по запросу</span>
+          <span class="text-[22px] font-black text-primary leading-none">{{ site.price_label }}</span>
         </div>
-        <p class="text-[12px] text-muted mt-1.5">
-          Точную стоимость рассчитает менеджер после отправки заявки
-        </p>
+        {% if site.price_note %}
+          <p class="text-[12px] text-muted mt-1.5">{{ site.price_note }}</p>
+        {% endif %}
         <span class="inline-block mt-1.5 text-[11px] font-medium px-2 py-0.5 rounded-sm
           {% if product.in_stock == 'in_stock' %}bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400
           {% elif product.in_stock == 'on_order' %}bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400
@@ -391,23 +385,24 @@
     </div>
   </div>
 
-  <!-- ─── Просмотр фото: модалка по центру ─── -->
+  <!-- ─── Просмотр фото: во весь экран ─── -->
+  <!-- Раньше это была модалка шириной 640px — при фото в блоке 520px
+       увеличение выходило ~1.2×, «то же самое». Пресет zoom (2000px по
+       большей стороне) позволяет показать фото на весь экран. -->
   <div x-show="lightboxOpen" x-cloak
        x-transition.opacity
        @keydown.escape.window="lightboxOpen = false"
        @click="lightboxOpen = false"
-       class="fixed inset-0 z-[100] bg-black/70 flex items-center justify-center p-4">
-    <div @click.stop x-show="lightboxOpen" x-transition
-         class="relative bg-surface rounded-lg shadow-2xl p-4 max-w-[640px] w-full">
-      <img :src="displayZoom" :alt="'{{ product.name|escapejs }}'"
-           class="w-full max-h-[70vh] object-contain">
-      <button @click="lightboxOpen = false" title="Закрыть"
-              class="absolute -top-3 -right-3 w-9 h-9 flex items-center justify-center rounded-full bg-surface border border-border shadow-md text-muted hover:text-accent transition-colors">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-          <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
-        </svg>
-      </button>
-    </div>
+       class="fixed inset-0 z-[100] bg-black/85 flex items-center justify-center p-3 sm:p-8">
+    <img x-show="lightboxOpen" x-transition
+         :src="displayZoom" :alt="'{{ product.name|escapejs }}'"
+         class="max-w-full max-h-full w-auto h-auto object-contain rounded-sm bg-surface cursor-zoom-out">
+    <button @click="lightboxOpen = false" title="Закрыть"
+            class="absolute top-4 right-4 w-10 h-10 flex items-center justify-center rounded-full bg-surface/90 border border-border shadow-md text-muted hover:text-accent transition-colors">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+        <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+      </svg>
+    </button>
   </div>
 </div>
 
@@ -731,10 +726,6 @@ function productOptions() {
       if (h)    parts.push(h);
       return parts.join(' · ');
     },
-    get photoCaption() {
-      return this.selectionSummary;
-    },
-
     // ── RAL-палитра ──
     get popularColors() {
       // Первыми — цвета, под которые у товара есть своё фото-правило
