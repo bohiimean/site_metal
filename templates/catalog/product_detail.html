@@ -74,6 +74,12 @@
           {% endif %}
         </template>
 
+        <!-- Фото выбранного исполнения нет — показано ближайшее -->
+        <template x-if="nearestRule">
+          <span class="absolute top-3 left-3 max-w-[80%] px-2.5 py-1 rounded-sm bg-black/60 text-white text-[11px] leading-snug pointer-events-none"
+                x-text="'Фото другого исполнения: ' + nearestRule.label"></span>
+        </template>
+
         <!-- Листание ракурсов (на телефоне — свайпом) -->
         <template x-if="galleryList.length > 1">
           <div>
@@ -709,7 +715,7 @@ function productOptions() {
     //    (условие по не выбранному измерению — тоже противоречие);
     // 2) из оставшихся — максимум совпавших условий;
     // 3) тай-брейк: цвет (точный, потом группа) > обработка > материал.
-    get ruleSet() {
+    get exactRule() {
       const selColorObj = this.colors.find(c => c.id === this.selColor) || null;
       let best = null, bestScore = -1, bestWeight = -1;
       for (const r of this.photoRules) {
@@ -734,7 +740,29 @@ function productOptions() {
           best = r; bestScore = score; bestWeight = weight;
         }
       }
-      return best ? best.images : null;
+      return best;
+    },
+    // Фото выбранного исполнения нет, а общих фото у товара нет тоже —
+    // показываем ближайшее исполнение (с теми же весами совпадений, но без
+    // отсева противоречий) с пометкой, что на фото другое. Раньше тут шли
+    // все фото правил подряд — вперемешку все цвета и обработки.
+    get nearestRule() {
+      if (this.exactRule || !this.product.gallery_is_fallback) return null;
+      const selColorObj = this.colors.find(c => c.id === this.selColor) || null;
+      let best = null, bestWeight = -1;
+      for (const r of this.photoRules) {
+        const weight =
+          (r.material_id != null && r.material_id === this.sel.material_id ? 1 : 0) +
+          (r.finish_id   != null && r.finish_id   === this.sel.finish_id   ? 2 : 0) +
+          (r.color_id    != null && r.color_id    === this.selColor        ? 4 : 0) +
+          (r.color_group != null && selColorObj && selColorObj.group === r.color_group ? 3 : 0);
+        if (weight > bestWeight) { best = r; bestWeight = weight; }
+      }
+      return best;
+    },
+    get ruleSet() {
+      const r = this.exactRule || this.nearestRule;
+      return r ? r.images : null;
     },
 
     // Что листается: ракурсы выбранного исполнения, за ними — общие фото

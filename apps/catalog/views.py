@@ -353,7 +353,7 @@ def _photo_rules(product):
     rules = {}
     qs = (
         product.images.overrides()
-        .select_related('color')
+        .select_related('material', 'finish', 'color')
         .order_by('sort_order', 'pk')
     )
     for img in qs:
@@ -372,6 +372,12 @@ def _photo_rules(product):
             'finish_id':   img.finish_id,
             'color_id':    img.color_id,
             'color_group': img.color_group or None,
+            # Для пометки «Фото другого исполнения: …», когда своего фото нет
+            'label': ' · '.join(filter(None, [
+                img.material and img.material.name,
+                img.finish and img.finish.name,
+                img.color.name if img.color else img.get_color_group_display(),
+            ])),
             'images':      [],
         })
         rule['images'].append(urls)
