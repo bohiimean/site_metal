@@ -330,7 +330,11 @@ class ProductImage(models.Model):
     - заполнены — условия показа при выборе на карточке. Марка стали в условия
       не входит намеренно: 304-золото и 430-золото выглядят одинаково.
 
-    Подбор на клиенте: отсеять фото, где хоть одно заполненное условие
+    Фото с одинаковыми условиями — ракурсы одного исполнения (порядок —
+    sort_order): на карточке они листаются миниатюрами, а при смене
+    исполнения открывается ракурс с тем же номером.
+
+    Подбор на клиенте: отсеять наборы, где хоть одно заполненное условие
     противоречит выбору → из оставшихся взять с максимумом совпавших условий →
     тай-брейк: цвет > обработка > материал → иначе галерея.
     """
@@ -412,30 +416,6 @@ class ProductImage(models.Model):
         verbose_name = 'Изображение'
         verbose_name_plural = 'Изображения'
         ordering = ['sort_order']
-        constraints = [
-            models.UniqueConstraint(
-                fields=['product', 'material', 'finish', 'color'],
-                condition=models.Q(color__isnull=False),
-                nulls_distinct=False,
-                name='uniq_product_image_rule_color',
-                violation_error_message='Фото-правило с такими условиями (цвет) уже есть.',
-            ),
-            models.UniqueConstraint(
-                fields=['product', 'material', 'finish', 'color_group'],
-                condition=~models.Q(color_group=''),
-                nulls_distinct=False,
-                name='uniq_product_image_rule_group',
-                violation_error_message='Фото-правило с такими условиями (группа цветов) уже есть.',
-            ),
-            models.UniqueConstraint(
-                fields=['product', 'material', 'finish'],
-                condition=models.Q(color__isnull=True, color_group='')
-                & ~models.Q(material__isnull=True, finish__isnull=True),
-                nulls_distinct=False,
-                name='uniq_product_image_rule_plain',
-                violation_error_message='Фото-правило с такими условиями уже есть.',
-            ),
-        ]
 
     def __str__(self):
         target = ', '.join(

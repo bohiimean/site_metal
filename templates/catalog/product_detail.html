@@ -17,8 +17,7 @@
 
 {% block content %}
 <div class="max-w-7xl mx-auto px-6 lg:px-12 py-6"
-     x-data="productOptions()"
-     x-init="init()">
+     x-data="productOptions()">
 
   <!-- Хлебные крошки -->
   <nav class="text-[11px] text-muted mb-6 flex items-center gap-1.5 whitespace-nowrap overflow-x-auto scrollbar-none">
@@ -52,7 +51,8 @@
            длинный предмет не обрезается. Клик — раскрытие на весь экран. -->
       <!-- Бокс намеренно ничем не выделен (без фона-подложки и обводки):
            белый фон товарных фото сливается со страницей -->
-      <div class="group relative overflow-hidden aspect-[4/3] lg:aspect-auto lg:h-[420px]">
+      <div class="group relative overflow-hidden aspect-[4/3] lg:aspect-auto lg:h-[420px]"
+           @touchstart.passive="touchStart($event)" @touchend="touchEnd($event)">
         <template x-if="displayImage">
           <img :src="displayImage" :srcset="displaySrcset"
                sizes="(min-width:1024px) 520px, 100vw"
@@ -74,6 +74,20 @@
           {% endif %}
         </template>
 
+        <!-- Листание ракурсов (на телефоне — свайпом) -->
+        <template x-if="galleryList.length > 1">
+          <div>
+            <button @click="showImage(-1)" title="Предыдущее фото" aria-label="Предыдущее фото"
+                    class="hidden lg:flex absolute left-2 top-1/2 -translate-y-1/2 w-9 h-9 items-center justify-center rounded-full bg-surface/85 backdrop-blur border border-border text-muted opacity-0 group-hover:opacity-100 transition-opacity hover:text-accent">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <button @click="showImage(1)" title="Следующее фото" aria-label="Следующее фото"
+                    class="hidden lg:flex absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 items-center justify-center rounded-full bg-surface/85 backdrop-blur border border-border text-muted opacity-0 group-hover:opacity-100 transition-opacity hover:text-accent">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+          </div>
+        </template>
+
         <!-- Кнопка-подсказка «развернуть» -->
         <template x-if="displayImage">
           <button @click="lightboxOpen = true" title="Открыть на весь экран"
@@ -86,11 +100,12 @@
       </div>
 
       <!-- Миниатюры галереи -->
-      <template x-if="images.length > 1">
-        <div class="flex gap-2 mt-3 overflow-x-auto scrollbar-none">
-          <template x-for="(img, i) in images" :key="i">
+      <!-- При выбранном исполнении — его ракурсы, затем общие фото -->
+      <template x-if="galleryList.length > 1">
+        <div class="flex gap-2 mt-3 p-0.5 overflow-x-auto scrollbar-none">
+          <template x-for="(img, i) in galleryList" :key="i + img.thumb">
             <button @click="selectImageIndex(i)"
-                    :class="activeIndex === i && !ruleImage
+                    :class="shownIndex === i
                       ? 'ring-2 ring-accent'
                       : 'ring-1 ring-border hover:ring-accent/50'"
                     class="w-16 h-16 shrink-0 rounded-sm overflow-hidden transition-shadow">
@@ -409,11 +424,28 @@
   <div x-show="lightboxOpen" x-cloak
        x-transition.opacity
        @keydown.escape.window="lightboxOpen = false"
+       @keydown.arrow-left.window="lightboxOpen && showImage(-1)"
+       @keydown.arrow-right.window="lightboxOpen && showImage(1)"
+       @touchstart.passive="touchStart($event)" @touchend="touchEnd($event)"
        @click="lightboxOpen = false"
        class="fixed inset-0 z-[100] bg-black/85 flex items-center justify-center p-3 sm:p-8">
     <img x-show="lightboxOpen" x-transition
          :src="displayZoom" :alt="'{{ product.name|escapejs }}'"
          class="max-w-full max-h-full w-auto h-auto object-contain rounded-sm bg-surface cursor-zoom-out">
+    <template x-if="galleryList.length > 1">
+      <div>
+        <button @click.stop="showImage(-1)" title="Предыдущее фото" aria-label="Предыдущее фото"
+                class="absolute left-3 sm:left-6 top-1/2 -translate-y-1/2 w-11 h-11 flex items-center justify-center rounded-full bg-surface/90 border border-border shadow-md text-muted hover:text-accent transition-colors">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <button @click.stop="showImage(1)" title="Следующее фото" aria-label="Следующее фото"
+                class="absolute right-3 sm:right-6 top-1/2 -translate-y-1/2 w-11 h-11 flex items-center justify-center rounded-full bg-surface/90 border border-border shadow-md text-muted hover:text-accent transition-colors">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <span class="absolute bottom-4 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-black/60 text-[12px] font-medium text-white tabular-nums"
+              x-text="(shownIndex + 1) + ' / ' + galleryList.length"></span>
+      </div>
+    </template>
     <button @click="lightboxOpen = false" title="Закрыть"
             class="absolute top-4 right-4 w-10 h-10 flex items-center justify-center rounded-full bg-surface/90 border border-border shadow-md text-muted hover:text-accent transition-colors">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
@@ -441,7 +473,8 @@ function productOptions() {
     customActive: { size: false, length: false, height: false },
     customValues: { size: '',   length: '',    height: '' },
 
-    activeIndex:  0,
+    activeIndex:  0,     // номер фото в galleryList (ракурс исполнения)
+    touch:        null,  // начало свайпа по фото: {x, y}
     lightboxOpen: false,
 
     // RAL-палитра
@@ -463,9 +496,22 @@ function productOptions() {
       this.photoRules = JSON.parse(document.getElementById('photo-rules-data').textContent);
       this.colorGroups = JSON.parse(document.getElementById('color-groups-data').textContent);
 
-      // Предзагрузка фото-правил, чтобы переключение не мигало
+      // Смена исполнения: смотрели ракурс — остаёмся на ракурсе с тем же
+      // номером (у нового исполнения его нет — на первый); смотрели общее
+      // фото (чертёж) — остаёмся на нём, хотя ракурсов перед ним стало
+      // больше или меньше. Исполнение появилось впервые — его первый ракурс.
+      this.$watch('ruleSet', (set, old) => {
+        if (!old) { this.activeIndex = 0; return; }
+        const oldLen = old.length, newLen = set ? set.length : 0;
+        const i = this.activeIndex;
+        this.activeIndex = i < oldLen ? (i < newLen ? i : 0) : newLen + (i - oldLen);
+      });
+
+      // Предзагрузка первого ракурса каждого исполнения, чтобы переключение
+      // не мигало; остальные ракурсы грузятся при листании
       this.photoRules.forEach(r => {
-        if (r.urls.gallery) { const img = new Image(); img.src = r.urls.gallery; }
+        const first = r.images[0];
+        if (first && first.gallery) { const img = new Image(); img.src = first.gallery; }
       });
 
       // Инициализация из URL (шаринг ссылки на исполнение) или дефолты
@@ -618,6 +664,22 @@ function productOptions() {
     selectImageIndex(i) {
       this.activeIndex = i;
     },
+    showImage(delta) {
+      const n = this.galleryList.length;
+      if (n > 1) this.activeIndex = (this.shownIndex + delta + n) % n;
+    },
+    touchStart(e) {
+      const t = e.changedTouches[0];
+      this.touch = { x: t.clientX, y: t.clientY };
+    },
+    touchEnd(e) {
+      if (!this.touch) return;
+      const t = e.changedTouches[0];
+      const dx = t.clientX - this.touch.x, dy = t.clientY - this.touch.y;
+      this.touch = null;
+      // Горизонтальный жест — листаем; вертикальный — это прокрутка страницы
+      if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)) this.showImage(dx < 0 ? 1 : -1);
+    },
 
     submitCustomColor() {
       if (!this.customText.trim()) return;
@@ -642,11 +704,12 @@ function productOptions() {
     },
 
     // ── Подбор фото по правилам ──
+    // Правило = набор ракурсов одного исполнения (фото с одинаковыми условиями).
     // 1) отсеять правила, где заполненное условие противоречит выбору
     //    (условие по не выбранному измерению — тоже противоречие);
     // 2) из оставшихся — максимум совпавших условий;
     // 3) тай-брейк: цвет (точный, потом группа) > обработка > материал.
-    get ruleImage() {
+    get ruleSet() {
       const selColorObj = this.colors.find(c => c.id === this.selColor) || null;
       let best = null, bestScore = -1, bestWeight = -1;
       for (const r of this.photoRules) {
@@ -671,11 +734,23 @@ function productOptions() {
           best = r; bestScore = score; bestWeight = weight;
         }
       }
-      return best ? best.urls : null;
+      return best ? best.images : null;
     },
 
+    // Что листается: ракурсы выбранного исполнения, за ними — общие фото
+    // (чертёж, монтаж). Если общих нет и images — подмена из правил, её
+    // не дописываем, иначе ракурсы задублируются.
+    get galleryList() {
+      const set = this.ruleSet;
+      if (!set) return this.images;
+      return this.product.gallery_is_fallback ? set : set.concat(this.images);
+    },
+    // Страховка от выхода за список (например, общих фото нет — подмена)
+    get shownIndex() {
+      return this.activeIndex < this.galleryList.length ? this.activeIndex : 0;
+    },
     get currentImage() {
-      return this.ruleImage || this.images[this.activeIndex] || this.images[0] || null;
+      return this.galleryList[this.shownIndex] || null;
     },
     get displayImage() {
       const img = this.currentImage;

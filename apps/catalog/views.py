@@ -345,12 +345,16 @@ def _option_tree(product):
 
 
 def _photo_rules(product):
-    """Фото-правила для клиентского подбора: условия + URL пресетов."""
-    rules = []
+    """Фото-правила для клиентского подбора: условия + ракурсы.
+
+    Фото с одинаковыми условиями — ракурсы одного исполнения: собираем их
+    в один набор в порядке sort_order.
+    """
+    rules = {}
     qs = (
         product.images.overrides()
         .select_related('color')
-        .order_by('sort_order')
+        .order_by('sort_order', 'pk')
     )
     for img in qs:
         try:
@@ -361,22 +365,27 @@ def _photo_rules(product):
                 'zoom':    img.zoom.url,
             }
         except Exception:
-            continue  # исходный файл недоступен — правило пропускаем
-        rules.append({
+            continue  # исходный файл недоступен — фото пропускаем
+        key = (img.material_id, img.finish_id, img.color_id, img.color_group)
+        rule = rules.setdefault(key, {
             'material_id': img.material_id,
             'finish_id':   img.finish_id,
             'color_id':    img.color_id,
             'color_group': img.color_group or None,
-            'urls':        urls,
+            'images':      [],
         })
-    return rules
+        rule['images'].append(urls)
+    return list(rules.values())
 
 
 def _product_detail(request, product):
     # Миниатюры: обычные фото галереи; если менеджер загрузил только
-    # фото-правила — показываем их, чтобы карточка не оставалась без фото
+    # фото-правила — показываем их, чтобы карточка не оставалась без фото.
+    # Флаг нужен клиенту: такую подмену не дописывать после ракурсов
+    # исполнения, иначе фото задублируются
     images = list(product.images.gallery().order_by('sort_order'))
-    if not images:
+    gallery_is_fallback = not images
+    if gallery_is_fallback:
         images = list(product.images.overrides().order_by('sort_order'))
 
     # Данные изображений для Alpine (смена фото, srcset, лайтбокс).
@@ -404,6 +413,7 @@ def _product_detail(request, product):
         'allow_custom_size':   product.allow_custom_size,
         'allow_custom_length': product.allow_custom_length,
         'allow_custom_height': product.allow_custom_height,
+        'gallery_is_fallback': gallery_is_fallback,
     }
 
     return render(request, 'catalog/product_detail.html', {
