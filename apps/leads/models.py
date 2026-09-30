@@ -46,6 +46,23 @@ class Lead(models.Model):
     consent_pdn = models.BooleanField(
         'Согласие на обработку ПДн', default=False,
     )
+    # Две отдельные галочки: согласие на обработку ПДн (152-ФЗ) и принятие
+    # условий продажи — разные юридические действия. К каждой — редакция
+    # текста, действовавшая при отправке. PROTECT: принятую редакцию нельзя
+    # удалить, пока на неё ссылается заявка.
+    pdn_revision = models.ForeignKey(
+        'pages.PageRevision', on_delete=models.PROTECT,
+        null=True, blank=True, related_name='+',
+        verbose_name='Редакция политики ПДн',
+    )
+    consent_terms = models.BooleanField(
+        'Принял условия продажи', default=False,
+    )
+    terms_revision = models.ForeignKey(
+        'pages.PageRevision', on_delete=models.PROTECT,
+        null=True, blank=True, related_name='+',
+        verbose_name='Редакция условий продажи',
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

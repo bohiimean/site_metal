@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.urls import reverse
 from django.utils.html import format_html, format_html_join
 from django.utils.safestring import mark_safe
 from unfold.admin import ModelAdmin
@@ -18,18 +19,36 @@ class LeadAdmin(ModelAdmin):
     list_display = ['id', 'name', 'phone', 'contact_display', 'source_badge', 'status_badge', 'created_at']
     list_filter = ['status', 'source']
     search_fields = ['name', 'phone']
-    readonly_fields = ['created_at', 'updated_at', 'cart_snapshot_display']
+    readonly_fields = ['created_at', 'updated_at', 'cart_snapshot_display',
+                       'consent_pdn', 'pdn_revision_link',
+                       'consent_terms', 'terms_revision_link']
     actions = [
         make_status_action('in_progress', 'Взять в работу'),
         make_status_action('closed',      'Закрыть'),
         make_status_action('new',         'Вернуть в «Новые»'),
     ]
     fieldsets = [
-        ('Контакт', {'fields': ['name', 'phone', 'contact_method', 'contact_value', 'comment', 'consent_pdn']}),
+        ('Контакт', {'fields': ['name', 'phone', 'contact_method', 'contact_value', 'comment']}),
+        ('Согласия', {'fields': ['consent_pdn', 'pdn_revision_link',
+                                 'consent_terms', 'terms_revision_link']}),
         ('Статус', {'fields': ['source', 'status']}),
         ('Корзина', {'fields': ['cart_snapshot_display']}),
         ('Даты', {'fields': ['created_at', 'updated_at']}),
     ]
+
+    def _revision_link(self, revision):
+        if revision is None:
+            return '—'
+        url = reverse('admin:pages_pagerevision_change', args=[revision.pk])
+        return format_html('<a href="{}">{}</a>', url, revision)
+
+    def pdn_revision_link(self, obj):
+        return self._revision_link(obj.pdn_revision)
+    pdn_revision_link.short_description = 'Редакция политики ПДн'
+
+    def terms_revision_link(self, obj):
+        return self._revision_link(obj.terms_revision)
+    terms_revision_link.short_description = 'Редакция условий продажи'
 
     def contact_display(self, obj):
         if obj.contact_method == 'phone':

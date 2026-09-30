@@ -168,6 +168,7 @@
           contactValue: '',
           comment: '',
           agree: false,
+          agreeTerms: false,
           phoneError: false,
           error: null,
           loading: false,
@@ -210,6 +211,10 @@
             }
             if (!this.agree) {
               this.error = 'Необходимо согласие на обработку персональных данных';
+              return;
+            }
+            if (!this.agreeTerms) {
+              this.error = 'Необходимо принять условия продажи';
               return;
             }
 
@@ -257,6 +262,7 @@
                   contact_value: this.contactMethod === 'phone' ? '' : this.contactValue.trim(),
                   comment: this.comment.trim(),
                   agree: this.agree,
+                  agree_terms: this.agreeTerms,
                   captcha_token: captchaToken,
                   cart_snapshot: items,
                 }),

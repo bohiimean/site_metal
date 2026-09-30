@@ -13,6 +13,10 @@ DRAFTS = {
         'Политика обработки персональных данных',
         'docs/politika-konfidentsialnosti.html',
     ),
+    'usloviya-prodazhi': (
+        'Условия продажи',
+        'docs/usloviya-prodazhi.html',
+    ),
 }
 
 

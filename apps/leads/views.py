@@ -11,6 +11,7 @@ from django.views.decorators.http import require_POST
 from django_ratelimit.decorators import ratelimit
 
 from apps.catalog.models import Product
+from apps.pages.models import PRIVACY_SLUG, TERMS_SLUG, Page
 from .captcha import client_ip, verify_captcha
 from .models import Lead
 
@@ -171,6 +172,11 @@ def submit_cart(request):
             {'ok': False, 'error': 'Необходимо согласие на обработку персональных данных'}
         )
 
+    if not data.get('agree_terms'):
+        return JsonResponse(
+            {'ok': False, 'error': 'Необходимо принять условия продажи'}
+        )
+
     if not verify_captcha(str(data.get('captcha_token') or ''), client_ip(request)):
         return JsonResponse(
             {'ok': False, 'error': 'Не пройдена проверка «Я не робот». Попробуйте ещё раз.'}
@@ -192,7 +198,10 @@ def submit_cart(request):
             comment=(str(data.get('comment') or ''))[:MAX_STR_LEN].strip(),
             cart_snapshot=cart_snapshot,
             source='cart',
-            consent_pdn=bool(data.get('agree')),
+            consent_pdn=True,
+            pdn_revision=Page.current_revision_of(PRIVACY_SLUG),
+            consent_terms=True,
+            terms_revision=Page.current_revision_of(TERMS_SLUG),
         )
         lead_id = lead.pk
         transaction.on_commit(lambda: _send_telegram(lead_id))
@@ -247,7 +256,9 @@ def submit_callback(request):
             comment=comment,
             cart_snapshot=[],
             source='callback_request',
-            consent_pdn=bool(request.POST.get('agree')),
+            # Звонок — не покупка: условия продажи здесь не принимаются
+            consent_pdn=True,
+            pdn_revision=Page.current_revision_of(PRIVACY_SLUG),
         )
         lead_id = lead.pk
         transaction.on_commit(lambda: _send_telegram(lead_id))
