@@ -83,10 +83,15 @@ class Finish(models.Model):
 
 
 class Color(models.Model):
+    # Порядок — порядок вкладок-групп в палитре на витрине
     COLOR_GROUP_CHOICES = [
         ('white',    'Белые'),
         ('gray',     'Серые'),
         ('black',    'Чёрные'),
+        ('yellow',   'Жёлтые'),
+        ('orange',   'Оранжевые'),
+        ('red',      'Красные'),
+        ('violet',   'Фиолетовые'),
         ('brown',    'Коричневые'),
         ('blue',     'Синие'),
         ('green',    'Зелёные'),

@@ -414,6 +414,7 @@ def _product_detail(request, product):
         'tree_json':         _option_tree(product),
         'params_json':       params,
         'photo_rules_json':  _photo_rules(product),
+        'color_groups_json': Color.COLOR_GROUP_CHOICES,
         'schema_org':        _schema_org(request, product, images),
         'related_products':  product.get_related(),
     })

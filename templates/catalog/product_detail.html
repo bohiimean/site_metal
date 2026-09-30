@@ -12,6 +12,7 @@
 {{ tree_json|json_script:"tree-data" }}
 {{ params_json|json_script:"params-data" }}
 {{ photo_rules_json|json_script:"photo-rules-data" }}
+{{ color_groups_json|json_script:"color-groups-data" }}
 {% endblock %}
 
 {% block content %}
@@ -429,6 +430,7 @@ function productOptions() {
     tree:       [],   // [{material_id, name, grades:[{grade_id, name, finishes:[...]}], finishes:[...]}]
     params:     {},   // {size: [...], length: [...], height: [...]}
     photoRules: [],   // [{material_id, finish_id, color_id, color_group, urls}]
+    colorGroups: [],  // [[key, label]] — группы цветов RAL-палитры
     images:     [],   // [{thumb, gallery, zoom}] — галерея товара
 
     // Выбор: справочные id дерева + значения свободных параметров
@@ -459,6 +461,7 @@ function productOptions() {
       this.tree       = JSON.parse(document.getElementById('tree-data').textContent);
       this.params     = JSON.parse(document.getElementById('params-data').textContent);
       this.photoRules = JSON.parse(document.getElementById('photo-rules-data').textContent);
+      this.colorGroups = JSON.parse(document.getElementById('color-groups-data').textContent);
 
       // Предзагрузка фото-правил, чтобы переключение не мигало
       this.photoRules.forEach(r => {
@@ -752,15 +755,13 @@ function productOptions() {
     },
 
     get availableRalFamilies() {
-      const labels = {
-        all: 'Все', white: 'Белые', gray: 'Серые', black: 'Чёрные',
-        brown: 'Коричневые', blue: 'Синие', green: 'Зелёные',
-        metallic: 'Металлик', other: 'Другие',
-      };
+      // Группы и их порядок — из Color.COLOR_GROUP_CHOICES; показываем только
+      // те, в которых у текущей обработки есть цвета
       const present = new Set(this.colors.map(c => c.group || 'other'));
-      const order = ['white', 'gray', 'black', 'brown', 'blue', 'green', 'metallic', 'other'];
       const result = [{ key: 'all', label: 'Все' }];
-      order.forEach(k => { if (present.has(k)) result.push({ key: k, label: labels[k] }); });
+      this.colorGroups.forEach(([k, label]) => {
+        if (present.has(k)) result.push({ key: k, label: label });
+      });
       return result;
     },
 
