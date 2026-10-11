@@ -1,5 +1,5 @@
 {% comment %}
-Свободные параметры товара (справочник «Параметры товаров»). Блок повторяется
+Свободные параметры товара (справочник «Параметры товара — Размеры»). Блок повторяется
 под каждой обработкой, но редактирует один общий список товара — params
 в optionsTree() (change_form.html).
 {% endcomment %}
@@ -48,7 +48,7 @@
       </template>
     </select>
     <a class="opt-btn-sm" href="{% url 'admin:references_parameter_changelist' %}"
-       target="_blank">справочник параметров ↗</a>
+       target="_blank">справочник размеров ↗</a>
     <span class="opt-count" x-show="params.some(e => !e.values.length && !e.custom)">
       параметр без значений и без «своего» не сохранится
     </span>

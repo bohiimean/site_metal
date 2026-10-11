@@ -178,7 +178,7 @@ class Parameter(models.Model):
 
     class Meta:
         verbose_name = 'Параметр'
-        verbose_name_plural = 'Параметры товаров'
+        verbose_name_plural = 'Параметры товара — Размеры'
         ordering = ['sort_order', 'name']
 
     def __str__(self):
