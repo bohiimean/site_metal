@@ -298,8 +298,13 @@ class NotesEntryPointsTests(AdminBase):
         response = self.client.get(self.changelist_url())
         self.assertContains(response, self.notes_url())
         self.assertContains(response, '💬 2')
-        self.assertContains(response, 'Оплачено, передано')
-        self.assertNotContains(response, 'со склада в Подольске')  # обрезано
+        # Обрезка — в видимом тексте колонки; полный текст живёт только
+        # в подсказке title (по решению заказчика 2026-10-11)
+        import re
+        link_text = re.search(r'data-notes-label="list"[^>]*>([^<]*)</a>',
+                              response.content.decode()).group(1)
+        self.assertIn('Оплачено, передано', link_text)
+        self.assertNotIn('со склада в Подольске', link_text)  # обрезано
 
     def test_list_column_offers_adding_when_empty(self):
         response = self.client.get(self.changelist_url())

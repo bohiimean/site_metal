@@ -43,6 +43,19 @@
 .lead-notes__submit:disabled { opacity: .6; cursor: default; }
 .lead-notes-button { font-weight: 600; }
 
+/* Список заявок: длинная заметка не раздвигает таблицу — одна строка
+   фиксированной ширины с многоточием, полный текст в подсказке (title);
+   короткие колонки не переносятся, селект статуса не сжимается */
+.lead-notes-link {
+  display: inline-block; max-width: 220px; vertical-align: middle;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+#result_list td.field-phone,
+#result_list td.field-contact_display,
+#result_list td.field-source_badge,
+#result_list td.field-created_short { white-space: nowrap; }
+#result_list td.field-status select { min-width: 150px; }
+
 /* Тёмная тема Unfold */
 .dark .lead-notes-box { background: #18181b; color: #e5e7eb; }
 .dark .lead-notes__table th { border-color: #3f3f46; }

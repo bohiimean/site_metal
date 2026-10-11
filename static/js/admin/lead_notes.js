@@ -55,9 +55,12 @@
     var root = box.querySelector('[data-summary]');
     if (!root || !currentUrl) return;
     document.querySelectorAll('[data-lead-notes="' + currentUrl + '"]').forEach(function (a) {
-      a.textContent = a.dataset.notesLabel === 'card'
-        ? '💬 Открыть заметки (' + root.dataset.count + ')'
-        : root.dataset.summary;
+      if (a.dataset.notesLabel === 'card') {
+        a.textContent = '💬 Открыть заметки (' + root.dataset.count + ')';
+      } else {
+        a.textContent = root.dataset.summary;
+        a.title = root.dataset.lastText || '';
+      }
     });
   }
 

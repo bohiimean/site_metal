@@ -9,7 +9,9 @@ from django.shortcuts import render
 from django.urls import path, reverse
 from django.utils.html import format_html, format_html_join
 from django.utils.safestring import mark_safe
+from django.utils.dateformat import format as date_format
 from django.utils.text import Truncator
+from django.utils.timezone import localtime
 from unfold.admin import ModelAdmin
 from .models import Lead, LeadNote, LeadStatus, cart_item_params
 
@@ -82,7 +84,7 @@ def notes_summary(count, last_text):
 class LeadAdmin(ModelAdmin):
     form = LeadForm
     list_display = ['id', 'name', 'phone', 'contact_display', 'source_badge',
-                    'status', 'notes_link', 'created_at']
+                    'status', 'notes_link', 'created_short']
     list_editable = ['status']
     list_filter = ['status', 'source']
     search_fields = ['name', 'phone']
@@ -199,17 +201,28 @@ class LeadAdmin(ModelAdmin):
             'notes_url': reverse('admin:leads_lead_notes', args=[lead.pk]),
             'count': len(manual),
             'summary': notes_summary(len(manual), manual[-1].text if manual else ''),
+            'last_text': manual[-1].text if manual else '',
             'max_length': LeadNote.MAX_LENGTH,
         }, status=status)
 
     def notes_link(self, obj):
+        # Одна строка с многоточием (lead_notes.css), полный текст последней
+        # заметки — в подсказке: длинная заметка не раздвигает таблицу
+        url = reverse('admin:leads_lead_notes', args=[obj.pk])
         return format_html(
-            '<a href="{}" data-lead-notes="{}" data-notes-label="list">{}</a>',
-            reverse('admin:leads_lead_notes', args=[obj.pk]),
-            reverse('admin:leads_lead_notes', args=[obj.pk]),
+            '<a href="{}" data-lead-notes="{}" data-notes-label="list" '
+            'class="lead-notes-link" title="{}">{}</a>',
+            url, url, obj._last_note or '',
             notes_summary(obj._notes_count, obj._last_note or ''),
         )
     notes_link.short_description = 'Заметки'
+
+    def created_short(self, obj):
+        # Короткая дата в одну строку — длинная «11 октября 2026 г. 13:37»
+        # не помещалась в таблицу рядом со статусом и заметками
+        return date_format(localtime(obj.created_at), 'd.m.Y H:i')
+    created_short.short_description = 'Создана'
+    created_short.admin_order_field = 'created_at'
 
     def notes_button(self, obj):
         if not obj.pk:

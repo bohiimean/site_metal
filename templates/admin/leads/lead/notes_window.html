@@ -3,7 +3,8 @@
 static/js/admin/lead_notes.js). data-summary / data-count — для обновления
 подписи кнопок после добавления заметки.
 {% endcomment %}
-<div class="lead-notes" data-summary="{{ summary }}" data-count="{{ count }}">
+<div class="lead-notes" data-summary="{{ summary }}" data-count="{{ count }}"
+     data-last-text="{{ last_text }}">
   <div class="lead-notes__head">
     <span>Заявка #{{ lead.pk }} · {{ lead.name }} — заметки</span>
     <button type="button" class="lead-notes__close" data-lead-notes-close title="Закрыть">✕</button>
