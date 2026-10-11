@@ -1,0 +1,50 @@
+/* Окно заметок по заявке (static/js/admin/lead_notes.js) */
+.lead-notes-overlay {
+  position: fixed; inset: 0; z-index: 1000;
+  background: rgba(0, 0, 0, .45);
+  display: flex; align-items: flex-start; justify-content: center;
+  padding: 8vh 16px 16px;
+}
+.lead-notes-overlay[hidden] { display: none; }
+.lead-notes-box {
+  width: 100%; max-width: 760px; max-height: 84vh; overflow: auto;
+  background: #fff; color: #1f2937;
+  border-radius: 8px; box-shadow: 0 20px 50px rgba(0, 0, 0, .3);
+}
+.lead-notes { padding: 18px 20px; font-size: 13px; }
+.lead-notes__head {
+  display: flex; justify-content: space-between; align-items: center;
+  font-weight: 600; font-size: 15px; margin-bottom: 14px;
+}
+.lead-notes__close {
+  border: 0; background: none; cursor: pointer; font-size: 16px; color: #6b7280;
+}
+.lead-notes__scroll { max-height: 50vh; overflow: auto; margin-bottom: 14px; }
+.lead-notes__table { width: 100%; border-collapse: collapse; }
+.lead-notes__table th {
+  text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .04em;
+  color: #6b7280; padding: 6px 8px; border-bottom: 1px solid #e5e7eb;
+  position: sticky; top: 0; background: inherit;
+}
+.lead-notes__table td { padding: 8px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
+.lead-notes__table tr.is-status td { color: #6b7280; font-style: italic; }
+.lead-notes__date { white-space: nowrap; color: #6b7280; }
+.lead-notes__empty { color: #6b7280; margin: 0 0 14px; }
+.lead-notes__form textarea {
+  width: 100%; box-sizing: border-box; padding: 8px 10px; font: inherit;
+  border: 1px solid #d1d5db; border-radius: 6px; resize: vertical;
+  background: transparent; color: inherit;
+}
+.lead-notes__error { color: #dc2626; margin: 6px 0 0; }
+.lead-notes__submit {
+  margin-top: 8px; padding: 7px 16px; border: 0; border-radius: 6px;
+  background: #9333ea; color: #fff; font-weight: 600; cursor: pointer;
+}
+.lead-notes__submit:disabled { opacity: .6; cursor: default; }
+.lead-notes-button { font-weight: 600; }
+
+/* Тёмная тема Unfold */
+.dark .lead-notes-box { background: #18181b; color: #e5e7eb; }
+.dark .lead-notes__table th { border-color: #3f3f46; }
+.dark .lead-notes__table td { border-color: #27272a; }
+.dark .lead-notes__form textarea { border-color: #3f3f46; }
