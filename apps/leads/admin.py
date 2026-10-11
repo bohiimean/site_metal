@@ -3,7 +3,7 @@ from django.urls import reverse
 from django.utils.html import format_html, format_html_join
 from django.utils.safestring import mark_safe
 from unfold.admin import ModelAdmin
-from .models import Lead
+from .models import Lead, cart_item_params
 
 
 def make_status_action(status, label):
@@ -97,17 +97,9 @@ class LeadAdmin(ModelAdmin):
                 extras.append(format_html(
                     '<span style="color:#555">🎨 {}</span>', item['color'],
                 ))
-            if item.get('size'):
+            for name, value in cart_item_params(item):
                 extras.append(format_html(
-                    '<span style="color:#555">📐 размер: {}</span>', item['size'],
-                ))
-            if item.get('length'):
-                extras.append(format_html(
-                    '<span style="color:#555">📏 длина: {}</span>', item['length'],
-                ))
-            if item.get('height'):
-                extras.append(format_html(
-                    '<span style="color:#555">📏 высота: {}</span>', item['height'],
+                    '<span style="color:#555">📐 {}: {}</span>', name, value,
                 ))
             if item.get('note'):
                 extras.append(format_html(

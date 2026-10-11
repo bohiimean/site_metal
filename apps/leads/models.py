@@ -1,5 +1,30 @@
 from django.db import models
 
+# Поля параметров в слепках заявок до справочника параметров — старые заявки
+# и корзины из localStorage покупателей хранят их так
+LEGACY_PARAM_FIELDS = [('size', 'Размер'), ('length', 'Длина'), ('height', 'Высота')]
+
+
+def cart_item_params(item):
+    """Выбранные параметры позиции слепка: [(название, значение)].
+
+    Новый формат — item['params'] = [{name, value}], старый — поля
+    size / length / height. Битые записи пропускаются.
+    """
+    result = []
+    params = item.get('params')
+    if isinstance(params, list):
+        for p in params:
+            if not isinstance(p, dict):
+                continue
+            name, value = p.get('name'), p.get('value')
+            if isinstance(name, str) and isinstance(value, str) and name and value:
+                result.append((name, value))
+    for field, label in LEGACY_PARAM_FIELDS:
+        if item.get(field):
+            result.append((label, str(item[field])))
+    return result
+
 
 class Lead(models.Model):
     SOURCE_CHOICES = [
@@ -33,7 +58,8 @@ class Lead(models.Model):
     cart_snapshot = models.JSONField(
         'Состав корзины', default=list, blank=True,
         help_text='Слепок корзины на момент отправки: [{name, slug, qty, '
-                  'material, steel_grade, finish, color, size, length, height, note}]',
+                  'material, steel_grade, finish, color, params: [{name, value}], note}]. '
+                  'В заявках до справочника параметров вместо params — size, length, height.',
     )
     source = models.CharField(
         'Источник', max_length=20,

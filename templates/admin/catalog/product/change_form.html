@@ -83,13 +83,23 @@
   <p class="opt-hint">
     Отметьте доступные ветки. Дерево задаёт разрешённые сочетания: не отмечено —
     покупатель выбрать не сможет. Цвета отмечаются на каждой обработке отдельно
-    (у «Полировки» под 304 и под 430 — свои наборы). Под цветами — размеры,
-    длины и высоты: списки общие для всего товара, значение добавляется по
-    Enter. Сохраняется вместе с формой товара — кнопкой «Сохранить» внизу.
+    (у «Полировки» под 304 и под 430 — свои наборы). Под цветами — параметры
+    из справочника (длина, ширина…): списки общие для всего товара, значение
+    добавляется по Enter. Сохраняется вместе с формой товара — кнопкой
+    «Сохранить» внизу.
   </p>
 
   <input type="hidden" name="options_tree" :value="JSON.stringify(state)">
   <input type="hidden" name="free_params" :value="JSON.stringify(params)">
+
+  <!-- Подсказки значений параметров: что уже заведено у других товаров -->
+  <template x-for="p in dicts.parameters" :key="p.id">
+    <datalist :id="'param-suggestions-' + p.id">
+      <template x-for="v in p.suggestions" :key="v">
+        <option :value="v"></option>
+      </template>
+    </datalist>
+  </template>
 
   <template x-for="mat in dicts.materials" :key="mat.id">
     <div class="opt-material">
@@ -130,35 +140,7 @@
                             <div class="opt-colors"
                                  x-data="{ get fe(){ return finishEntry(gradeEntry(mat.id, gr.id), fin.id) } }">
                               {% include "admin/catalog/product/_finish_colors.html" %}
-                              <div class="opt-leaf-params">
-                                <p class="opt-label">Размер / длина / высота
-                                  <span class="opt-count">— списки общие для всего товара, правка видна во всех обработках</span></p>
-                                <template x-for="cfg in paramConfigs" :key="cfg.kind">
-                                  <div class="opt-param-row">
-                                    <p class="opt-param-name">
-                                      <span x-text="cfg.title"></span>
-                                      <small x-text="cfg.hint"></small>
-                                    </p>
-                                    <div class="opt-chips">
-                                      <template x-for="(val, i) in params[cfg.kind].values" :key="val">
-                                        <span class="opt-chip">
-                                          <span x-text="val"></span>
-                                          <button type="button" title="Убрать"
-                                                  @click="params[cfg.kind].values.splice(i, 1)">×</button>
-                                        </span>
-                                      </template>
-                                      <input type="text" class="opt-chip-input"
-                                             :placeholder="cfg.placeholder"
-                                             @keydown.enter.prevent="addParam(cfg.kind, $event.target)"
-                                             @blur="addParam(cfg.kind, $event.target)">
-                                      <label class="opt-check" style="margin-left:8px;">
-                                        <input type="checkbox" x-model="params[cfg.kind].custom">
-                                        <span x-text="cfg.customLabel"></span>
-                                      </label>
-                                    </div>
-                                  </div>
-                                </template>
-                              </div>
+                              {% include "admin/catalog/product/_free_params.html" %}
                             </div>
                           </template>
                         </div>
@@ -189,35 +171,7 @@
                     <div class="opt-colors"
                          x-data="{ get fe(){ return finishEntry(matEntry(mat.id), fin.id) } }">
                       {% include "admin/catalog/product/_finish_colors.html" %}
-                      <div class="opt-leaf-params">
-                        <p class="opt-label">Размер / длина / высота
-                          <span class="opt-count">— списки общие для всего товара, правка видна во всех обработках</span></p>
-                        <template x-for="cfg in paramConfigs" :key="cfg.kind">
-                          <div class="opt-param-row">
-                            <p class="opt-param-name">
-                              <span x-text="cfg.title"></span>
-                              <small x-text="cfg.hint"></small>
-                            </p>
-                            <div class="opt-chips">
-                              <template x-for="(val, i) in params[cfg.kind].values" :key="val">
-                                <span class="opt-chip">
-                                  <span x-text="val"></span>
-                                  <button type="button" title="Убрать"
-                                          @click="params[cfg.kind].values.splice(i, 1)">×</button>
-                                </span>
-                              </template>
-                              <input type="text" class="opt-chip-input"
-                                     :placeholder="cfg.placeholder"
-                                     @keydown.enter.prevent="addParam(cfg.kind, $event.target)"
-                                     @blur="addParam(cfg.kind, $event.target)">
-                              <label class="opt-check" style="margin-left:8px;">
-                                <input type="checkbox" x-model="params[cfg.kind].custom">
-                                <span x-text="cfg.customLabel"></span>
-                              </label>
-                            </div>
-                          </div>
-                        </template>
-                      </div>
+                      {% include "admin/catalog/product/_free_params.html" %}
                     </div>
                   </template>
                 </div>
@@ -237,20 +191,9 @@
 <script>
 function optionsTree() {
   return {
-    dicts: { materials: [], finishes: [], colors: [], palettes: [] },
+    dicts: { materials: [], finishes: [], colors: [], palettes: [], parameters: [] },
     state: [],   // finish = {finish_id, palette_id, color_ids}; palette_id!=null → живая палитра
-    params: { size: { values: [], custom: false },
-              length: { values: [], custom: false },
-              height: { values: [], custom: false } },
-
-    paramConfigs: [
-      { kind: 'size',   title: 'Размер', hint: 'например 20×20',
-        placeholder: '+ размер', customLabel: 'свой размер' },
-      { kind: 'length', title: 'Длина',  hint: 'в метрах, например 3',
-        placeholder: '+ длина',  customLabel: 'своя длина' },
-      { kind: 'height', title: 'Высота', hint: 'в мм, например 40',
-        placeholder: '+ высота', customLabel: 'своя высота' },
-    ],
+    params: [],  // [{parameter_id, values: [...], custom}] — порядок = порядок на карточке
 
     init() {
       this.dicts = JSON.parse(document.getElementById('option-dicts-data').textContent);
@@ -258,11 +201,47 @@ function optionsTree() {
       this.params = JSON.parse(document.getElementById('param-state-data').textContent);
     },
 
-    addParam(kind, input) {
+    // ── Параметры из справочника ──
+    paramDict(entry) {
+      return this.dicts.parameters.find(p => p.id === entry.parameter_id) || null;
+    },
+    paramTitle(entry) {
+      const p = this.paramDict(entry);
+      if (!p) return '?';
+      return p.name + (p.is_active ? '' : ' (выключен в справочнике)');
+    },
+    paramHint(entry) {
+      const p = this.paramDict(entry);
+      if (!p) return '';
+      return [p.unit ? 'в ' + p.unit : '', p.example ? 'например ' + p.example : '']
+        .filter(Boolean).join(', ');
+    },
+    get availableParameters() {
+      // Ещё не добавленные к товару и не выключенные
+      const used = new Set(this.params.map(e => e.parameter_id));
+      return this.dicts.parameters.filter(p => p.is_active && !used.has(p.id));
+    },
+    addParameter(select) {
+      const id = parseInt(select.value, 10);
+      select.value = '';
+      if (id && !this.params.some(e => e.parameter_id === id)) {
+        this.params.push({ parameter_id: id, values: [], custom: false });
+      }
+    },
+    removeParameter(i) {
+      this.params.splice(i, 1);
+    },
+    moveParameter(i, delta) {
+      const j = i + delta;
+      if (j < 0 || j >= this.params.length) return;
+      const [entry] = this.params.splice(i, 1);
+      this.params.splice(j, 0, entry);
+    },
+    addParam(entry, input) {
       const v = input.value.trim().slice(0, 50);
       input.value = '';
-      if (v && !this.params[kind].values.includes(v)) {
-        this.params[kind].values.push(v);
+      if (v && !entry.values.includes(v)) {
+        entry.values.push(v);
       }
     },
 

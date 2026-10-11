@@ -345,7 +345,7 @@
         </div>
       </template>
 
-      <!-- ── Свободные параметры: размер / длина / высота ── -->
+      <!-- ── Свободные параметры из справочника (длина, ширина…) ── -->
       <template x-for="param in paramConfigs" :key="param.kind">
         <div x-show="param.values.length > 0 || param.allowCustom">
           <p class="text-[12px] font-semibold text-primary mb-2.5">
@@ -466,7 +466,7 @@ function productOptions() {
   return {
     product:    {},
     tree:       [],   // [{material_id, name, grades:[{grade_id, name, finishes:[...]}], finishes:[...]}]
-    params:     {},   // {size: [...], length: [...], height: [...]}
+    params:     [],   // [{id, name, unit, custom_label, example, values, allow_custom}]
     photoRules: [],   // [{material_id, finish_id, color_id, color_group, urls}]
     colorGroups: [],  // [[key, label]] — группы цветов RAL-палитры
     images:     [],   // [{thumb, gallery, zoom}] — галерея товара
@@ -474,10 +474,10 @@ function productOptions() {
     // Выбор: справочные id дерева + значения свободных параметров
     sel:       { material_id: null, grade_id: null, finish_id: null },
     selColor:  null,
-    selParams: { size: null, length: null, height: null },
-
-    customActive: { size: false, length: false, height: false },
-    customValues: { size: '',   length: '',    height: '' },
+    // Ключ — id параметра справочника
+    selParams:    {},
+    customActive: {},
+    customValues: {},
 
     activeIndex:  0,     // номер фото в galleryList (ракурс исполнения)
     touch:        null,  // начало свайпа по фото: {x, y}
@@ -499,6 +499,11 @@ function productOptions() {
       this.product    = JSON.parse(document.getElementById('product-data').textContent);
       this.tree       = JSON.parse(document.getElementById('tree-data').textContent);
       this.params     = JSON.parse(document.getElementById('params-data').textContent);
+      this.params.forEach(p => {
+        this.selParams[p.id] = null;
+        this.customActive[p.id] = false;
+        this.customValues[p.id] = '';
+      });
       this.photoRules = JSON.parse(document.getElementById('photo-rules-data').textContent);
       this.colorGroups = JSON.parse(document.getElementById('color-groups-data').textContent);
 
@@ -527,9 +532,7 @@ function productOptions() {
         grade_id:    parseInt(q.get('grade'), 10)    || null,
         finish_id:   parseInt(q.get('finish'), 10)   || null,
         color_id:    parseInt(q.get('color'), 10)    || null,
-        size:   q.get('size'),
-        length: q.get('length'),
-        height: q.get('height'),
+        params:      this._paramsFromQuery(q),
       });
       this._syncUrl(true);
 
@@ -541,9 +544,7 @@ function productOptions() {
           grade_id:    parseInt(p.get('grade'), 10)    || null,
           finish_id:   parseInt(p.get('finish'), 10)   || null,
           color_id:    parseInt(p.get('color'), 10)    || null,
-          size:   p.get('size'),
-          length: p.get('length'),
-          height: p.get('height'),
+          params:      this._paramsFromQuery(p),
         });
       });
     },
@@ -565,12 +566,19 @@ function productOptions() {
       const colors = fin ? fin.colors : [];
       this.selColor = colors.some(c => c.id === s.color_id) ? s.color_id : null;
 
-      ['size', 'length', 'height'].forEach(kind => {
-        const values = this.params[kind] || [];
-        this.selParams[kind] = values.includes(s[kind]) ? s[kind] : (values[0] || null);
-        this.customActive[kind] = false;
-        this.customValues[kind] = '';
+      const wanted = s.params || {};
+      this.params.forEach(p => {
+        this.selParams[p.id] = p.values.includes(wanted[p.id]) ? wanted[p.id] : (p.values[0] || null);
+        this.customActive[p.id] = false;
+        this.customValues[p.id] = '';
       });
+    },
+
+    // Значения параметров из URL: ?p3=20 (ключ — как у фильтра каталога)
+    _paramsFromQuery(q) {
+      const res = {};
+      this.params.forEach(p => { res[p.id] = q.get('p' + p.id); });
+      return res;
     },
 
     _syncUrl(replace = false) {
@@ -579,8 +587,8 @@ function productOptions() {
       if (this.sel.grade_id)    q.set('grade', this.sel.grade_id);
       if (this.sel.finish_id)   q.set('finish', this.sel.finish_id);
       if (this.selColor)        q.set('color', this.selColor);
-      ['size', 'length', 'height'].forEach(kind => {
-        if (this.selParams[kind] && !this.customActive[kind]) q.set(kind, this.selParams[kind]);
+      this.params.forEach(p => {
+        if (this.selParams[p.id] && !this.customActive[p.id]) q.set('p' + p.id, this.selParams[p.id]);
       });
       const url = q.toString() ? '?' + q.toString() : location.pathname;
       if (replace) history.replaceState({}, '', url);
@@ -626,8 +634,7 @@ function productOptions() {
       this.customSubmitted = false;
     },
     selectMaterial(id) {
-      this._applyState({ material_id: id, size: this.selParams.size,
-                         length: this.selParams.length, height: this.selParams.height });
+      this._applyState({ material_id: id, params: Object.assign({}, this.selParams) });
       this._resetColorUI();
       this._syncUrl();
     },
@@ -803,17 +810,15 @@ function productOptions() {
     },
 
     get paramConfigs() {
-      return [
-        { kind: 'size',   title: 'Размер', unit: '',    customLabel: 'Свой размер',
-          placeholder: 'Например: 25×25',
-          values: this.params.size || [],   allowCustom: this.product.allow_custom_size },
-        { kind: 'length', title: 'Длина',  unit: ' м',  customLabel: 'Своя длина',
-          placeholder: 'Например: 2.7',
-          values: this.params.length || [], allowCustom: this.product.allow_custom_length },
-        { kind: 'height', title: 'Высота', unit: ' мм', customLabel: 'Своя высота',
-          placeholder: 'Например: 60',
-          values: this.params.height || [], allowCustom: this.product.allow_custom_height },
-      ];
+      return this.params.map(p => ({
+        kind:        p.id,
+        title:       p.name,
+        unit:        p.unit ? ' ' + p.unit : '',
+        customLabel: p.custom_label,
+        placeholder: p.example ? 'Например: ' + p.example : '',
+        values:      p.values,
+        allowCustom: p.allow_custom,
+      }));
     },
 
     paramLabel(param) {
@@ -825,13 +830,21 @@ function productOptions() {
       return v ? v + param.unit : '';
     },
 
-    // Значение параметра для корзины/подписи (учитывает «свой …»)
-    _paramValue(kind, unit) {
-      if (this.customActive[kind]) {
-        const v = this.customValues[kind].trim();
-        return v ? v + unit + ' (свой)' : null;
+    // Значение параметра для корзины/подписи (учитывает «своё значение»)
+    _paramValue(param) {
+      if (this.customActive[param.kind]) {
+        const v = (this.customValues[param.kind] || '').trim();
+        return v ? v + param.unit + ' (свой)' : null;
       }
-      return this.selParams[kind] ? this.selParams[kind] + unit : null;
+      const v = this.selParams[param.kind];
+      return v ? v + param.unit : null;
+    },
+
+    // Выбранные параметры читаемыми строками: [{name: 'Длина', value: '3 м'}]
+    get selectedParams() {
+      return this.paramConfigs
+        .map(p => ({ name: p.title, value: this._paramValue(p) }))
+        .filter(p => p.value);
     },
 
     get selectionSummary() {
@@ -840,12 +853,7 @@ function productOptions() {
       if (this.currentGrade)    parts.push(this.currentGrade.name);
       if (this.currentFinish)   parts.push(this.currentFinish.name);
       if (this.selectedColorName) parts.push(this.selectedColorName);
-      const size = this._paramValue('size', '');
-      const len  = this._paramValue('length', ' м');
-      const h    = this._paramValue('height', ' мм');
-      if (size) parts.push(size);
-      if (len)  parts.push(len);
-      if (h)    parts.push(h);
+      this.selectedParams.forEach(p => parts.push(p.value));
       return parts.join(' · ');
     },
     // ── RAL-палитра ──
@@ -893,9 +901,7 @@ function productOptions() {
         steel_grade: this.currentGrade    ? this.currentGrade.name    : null,
         finish:      this.currentFinish   ? this.currentFinish.name   : null,
         color:       this.selectedColorName || null,
-        size:        this._paramValue('size', ''),
-        length:      this._paramValue('length', ' м'),
-        height:      this._paramValue('height', ' мм'),
+        params:      this.selectedParams,
       };
       if (this.customSubmitted && this.customLastText) {
         item.color = null;

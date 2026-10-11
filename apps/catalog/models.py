@@ -4,7 +4,7 @@ from treebeard.mp_tree import MP_Node
 from imagekit.models import ImageSpecField
 from imagekit.processors import ResizeToFill, ResizeToFit
 
-from apps.references.models import Material, SteelGrade, Finish, Color
+from apps.references.models import Material, SteelGrade, Finish, Color, Parameter
 from apps.validators import IMAGE_UPLOAD_VALIDATORS, UPLOAD_HELP_TEXT
 
 
@@ -63,8 +63,7 @@ class CategoryFacet(models.Model):
         ('steel_grade', 'Марка стали'),
         ('finish',      'Обработка'),
         ('color',       'Цвет'),
-        ('size',        'Размер'),
-        ('length',      'Длина'),
+        ('param',       'Параметр'),
         ('in_stock',    'Только в наличии'),
     ]
 
@@ -74,6 +73,15 @@ class CategoryFacet(models.Model):
         verbose_name='Категория',
     )
     facet = models.CharField('Фильтр', max_length=20, choices=FACET_CHOICES)
+    # Фильтр «Параметр» — по одному параметру справочника (ширина, длина…);
+    # таких фильтров в разделе может быть несколько
+    parameter = models.ForeignKey(
+        Parameter, on_delete=models.CASCADE,
+        null=True, blank=True,
+        related_name='facets',
+        verbose_name='Параметр',
+        help_text='Только для фильтра «Параметр»',
+    )
     title = models.CharField(
         'Свой заголовок', max_length=100, blank=True,
         help_text='Пусто — стандартный («Марка стали» и т.п.)',
@@ -85,10 +93,34 @@ class CategoryFacet(models.Model):
         verbose_name = 'Фильтр раздела'
         verbose_name_plural = 'Фильтры раздела'
         ordering = ['sort_order']
-        unique_together = [('category', 'facet')]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['category', 'facet'],
+                condition=~models.Q(facet='param'),
+                name='uniq_category_facet',
+                violation_error_message='Такой фильтр в разделе уже есть.',
+            ),
+            models.UniqueConstraint(
+                fields=['category', 'parameter'],
+                condition=models.Q(facet='param'),
+                name='uniq_category_param_facet',
+                violation_error_message='Фильтр по этому параметру в разделе уже есть.',
+            ),
+        ]
 
     def __str__(self):
+        if self.facet == 'param' and self.parameter_id:
+            return f'{self.category} — {self.parameter.name}'
         return f'{self.category} — {self.get_facet_display()}'
+
+    def clean(self):
+        super().clean()
+        if self.facet == 'param' and not self.parameter_id:
+            raise ValidationError({'parameter': 'Выберите параметр для фильтра.'})
+        if self.facet != 'param' and self.parameter_id:
+            raise ValidationError({
+                'parameter': 'Параметр выбирается только для фильтра «Параметр».',
+            })
 
 
 # Сколько карточек показывать в блоке «С этим также покупают»
@@ -149,18 +181,6 @@ class Product(models.Model):
     in_stock = models.CharField(
         'Наличие', max_length=20,
         choices=STOCK_CHOICES, default='in_stock',
-    )
-    allow_custom_size = models.BooleanField(
-        'Свой размер', default=False,
-        help_text='На карточке появится поле «Свой размер» — клиент укажет нужный, он уйдёт в заявку',
-    )
-    allow_custom_length = models.BooleanField(
-        'Своя длина', default=False,
-        help_text='Аналогично — поле «Своя длина»',
-    )
-    allow_custom_height = models.BooleanField(
-        'Своя высота', default=False,
-        help_text='Аналогично — поле «Своя высота»',
     )
     hide_related = models.BooleanField(
         'Скрыть блок «С этим также покупают»', default=False,
@@ -579,48 +599,71 @@ class ProductOptionNode(models.Model):
         super().save(*args, **kwargs)
 
 
-class ProductParamValue(models.Model):
-    """Значение свободного параметра товара (размер / длина / высота).
+class ProductParameter(models.Model):
+    """Параметр справочника, подключённый к товару, со своим списком значений.
 
-    Плоские независимые списки: невозможных сочетаний не создают и от дерева
-    опций не зависят. Нет строк параметра — селектор на карточке не показывается.
-    Ручной ввод покупателя включается флагами allow_custom_* на товаре.
+    Значения — плоский независимый список (ProductParamValue): невозможных
+    сочетаний не создают и от дерева опций не зависят. allow_custom включает
+    на карточке поле для своего значения покупателя — оно уйдёт в заявку.
     """
-    KIND_CHOICES = [
-        ('size',   'Размер'),
-        ('length', 'Длина'),
-        ('height', 'Высота'),
-    ]
-    # Подписи значений на витрине: длина в метрах, высота в миллиметрах
-    KIND_UNITS = {'size': '', 'length': ' м', 'height': ' мм'}
-
     product = models.ForeignKey(
         Product, on_delete=models.CASCADE,
-        related_name='param_values',
+        related_name='parameters',
         verbose_name='Товар',
     )
-    kind = models.CharField('Параметр', max_length=10, choices=KIND_CHOICES)
-    value = models.CharField(
-        'Значение', max_length=50,
-        help_text='Размер — «20×20», длина — «3» (м), высота — «40» (мм)',
+    # PROTECT: параметр, который есть у товаров, удалить нельзя — только
+    # выключить; иначе молча пропали бы значения у всего каталога
+    parameter = models.ForeignKey(
+        Parameter, on_delete=models.PROTECT,
+        related_name='product_links',
+        verbose_name='Параметр',
+    )
+    allow_custom = models.BooleanField(
+        'Своё значение', default=False,
+        help_text='Покупатель может указать своё значение — его проверит менеджер',
     )
     sort_order = models.PositiveIntegerField('Порядок', default=0)
 
     class Meta:
         verbose_name = 'Параметр товара'
         verbose_name_plural = 'Параметры товара'
-        ordering = ['kind', 'sort_order', 'id']
+        ordering = ['sort_order', 'id']
         constraints = [
             models.UniqueConstraint(
-                fields=['product', 'kind', 'value'],
+                fields=['product', 'parameter'],
+                name='uniq_product_parameter',
+                violation_error_message='Этот параметр у товара уже есть.',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.product} / {self.parameter.name}'
+
+
+class ProductParamValue(models.Model):
+    """Значение параметра товара: «3» у длины, «20×20» у размера.
+
+    Хранится без единицы — её подставляет справочник (Parameter.unit).
+    """
+    product_parameter = models.ForeignKey(
+        ProductParameter, on_delete=models.CASCADE,
+        related_name='values',
+        verbose_name='Параметр товара',
+    )
+    value = models.CharField('Значение', max_length=50)
+    sort_order = models.PositiveIntegerField('Порядок', default=0)
+
+    class Meta:
+        verbose_name = 'Значение параметра'
+        verbose_name_plural = 'Значения параметра'
+        ordering = ['sort_order', 'id']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['product_parameter', 'value'],
                 name='uniq_product_param_value',
                 violation_error_message='Такое значение у этого параметра уже есть.',
             ),
         ]
 
     def __str__(self):
-        return f'{self.product} / {self.get_kind_display()}: {self.value}'
-
-    @property
-    def display(self):
-        return f'{self.value}{self.KIND_UNITS.get(self.kind, "")}'
+        return f'{self.product_parameter}: {self.value}'

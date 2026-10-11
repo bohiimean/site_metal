@@ -10,11 +10,14 @@ from unfold.decorators import action
 from unfold.widgets import SELECT_CLASSES
 from treebeard.forms import movenodeform_factory
 
-from apps.references.models import Material, SteelGrade, Finish, Color, ColorPalette
+from apps.references.models import (
+    Material, SteelGrade, Finish, Color, ColorPalette, Parameter,
+)
 from .models import (
     Category, CategoryFacet, Product, ProductImage,
-    ProductOptionNode, ProductParamValue, ProductRelation,
+    ProductOptionNode, ProductParameter, ProductParamValue, ProductRelation,
 )
+from .utils import natural_sort_key
 
 
 # Treebeard TreeAdmin несовместим с unfold (битая разметка таблицы, drag&drop
@@ -37,12 +40,13 @@ class CategoryAdminForm(_CategoryBaseForm):
 class CategoryFacetInline(TabularInline):
     model = CategoryFacet
     extra = 0
-    fields = ['facet', 'title', 'sort_order', 'is_active']
+    fields = ['facet', 'parameter', 'title', 'sort_order', 'is_active']
     ordering_field = 'sort_order'
     verbose_name_plural = (
         'Фильтры раздела (нет ни одной строки — наследуются от родительской '
         'категории или показывается стандартный набор; фасет без значений '
-        'в разделе скрывается сам)'
+        'в разделе скрывается сам; для фильтра «Параметр» выберите параметр '
+        'справочника — длину, ширину и т.п.)'
     )
 
 
@@ -205,8 +209,8 @@ class ProductAdmin(ModelAdmin):
             'products': featured.select_related('category')
             .order_by('featured_order', '-created_at'),
         })
-    # Свободные параметры и флаги «свой размер/длина/высота» редактируются
-    # в секции «Дерево опций» на странице товара, не отдельными полями
+    # Свободные параметры (длина, ширина… из справочника) и флаги «своё
+    # значение» редактируются в секции «Дерево опций», не отдельными полями
     fieldsets = [
         (None, {'fields': ['name', 'slug', 'category', 'profile_code',
                            'in_stock', 'is_new', 'is_active', 'hide_related']}),
@@ -260,9 +264,28 @@ class ProductAdmin(ModelAdmin):
             for p in ColorPalette.objects.filter(is_active=True)
             .prefetch_related('colors').order_by('name')
         ]
+        # Подсказки значений — что уже заведено у товаров по этому параметру
+        suggestions = {}
+        for pid, value in (ProductParamValue.objects
+                           .values_list('product_parameter__parameter_id', 'value')
+                           .distinct()):
+            suggestions.setdefault(pid, set()).add(value)
+        parameters = [
+            {
+                'id': p.pk,
+                'name': p.name,
+                'unit': p.unit,
+                'custom_label': p.custom_label_display,
+                'example': p.example,
+                'is_active': p.is_active,
+                'suggestions': sorted(suggestions.get(p.pk, ()), key=natural_sort_key),
+            }
+            for p in Parameter.objects.all()
+        ]
         return {
             'materials': materials, 'finishes': finishes,
             'colors': colors, 'palettes': palettes,
+            'parameters': parameters,
         }
 
     def _option_state(self, object_id):
@@ -304,22 +327,17 @@ class ProductAdmin(ModelAdmin):
         return state
 
     def _param_state(self, object_id):
-        """Свободные параметры товара для секции опций."""
-        try:
-            product = Product.objects.get(pk=object_id)
-        except Product.DoesNotExist:
-            return {}
-        state = {}
-        for kind, _ in ProductParamValue.KIND_CHOICES:
-            state[kind] = {
-                'values': list(
-                    product.param_values.filter(kind=kind)
-                    .order_by('sort_order', 'id')
-                    .values_list('value', flat=True)
-                ),
-                'custom': getattr(product, f'allow_custom_{kind}'),
+        """Свободные параметры товара для секции опций, в порядке товара."""
+        return [
+            {
+                'parameter_id': pp.parameter_id,
+                'values': [v.value for v in pp.values.all()],
+                'custom': pp.allow_custom,
             }
-        return state
+            for pp in ProductParameter.objects
+            .filter(product_id=object_id)
+            .prefetch_related('values')
+        ]
 
     # ── Сохранение дерева ────────────────────────────────────────────────────
 
@@ -343,7 +361,7 @@ class ProductAdmin(ModelAdmin):
         if raw is not None:
             try:
                 desired = json.loads(raw)
-                if not isinstance(desired, dict):
+                if not isinstance(desired, list):
                     raise ValueError
             except (json.JSONDecodeError, ValueError):
                 self.message_user(
@@ -354,43 +372,71 @@ class ProductAdmin(ModelAdmin):
                 self._sync_free_params(obj, desired)
 
     def _sync_free_params(self, product, desired):
-        """Приводит значения размер/длина/высота и флаги «свой …» к форме."""
-        update_fields = []
-        for kind, _ in ProductParamValue.KIND_CHOICES:
-            entry = desired.get(kind)
-            if not isinstance(entry, dict):
+        """Приводит параметры товара к списку из формы.
+
+        desired — [{parameter_id, values: [...], custom}] в нужном порядке.
+        Мусорные записи и неизвестные параметры пропускаются, повтор
+        параметра — побеждает первая запись. Параметр без значений и без
+        «своего значения» на карточке не виден — не сохраняется.
+        """
+        known = set(Parameter.objects.values_list('pk', flat=True))
+        entries, seen = [], set()
+        for raw in desired:
+            if not isinstance(raw, dict):
                 continue
+            try:
+                pid = int(raw.get('parameter_id'))
+            except (TypeError, ValueError):
+                continue
+            raw_values = raw.get('values')
+            if pid not in known or pid in seen or not isinstance(raw_values, list):
+                continue
+            seen.add(pid)
 
-            values, seen = [], set()
-            for v in entry.get('values') or []:
+            values, unique = [], set()
+            for v in raw_values:
+                if not isinstance(v, (str, int, float)) or isinstance(v, bool):
+                    continue
                 v = str(v).strip()[:50]
-                if v and v not in seen:
-                    seen.add(v)
+                if v and v not in unique:
+                    unique.add(v)
                     values.append(v)
+            custom = bool(raw.get('custom'))
+            if values or custom:
+                entries.append((pid, values, custom))
 
-            existing = {
-                pv.value: pv
-                for pv in ProductParamValue.objects.filter(product=product, kind=kind)
-            }
-            for order, value in enumerate(values):
-                pv = existing.pop(value, None)
-                if pv is None:
-                    ProductParamValue.objects.create(
-                        product=product, kind=kind, value=value, sort_order=order,
-                    )
-                elif pv.sort_order != order:
-                    pv.sort_order = order
-                    pv.save(update_fields=['sort_order'])
-            for pv in existing.values():
-                pv.delete()
+        existing = {
+            pp.parameter_id: pp
+            for pp in ProductParameter.objects.filter(product=product)
+        }
+        for order, (pid, values, custom) in enumerate(entries):
+            pp = existing.pop(pid, None)
+            if pp is None:
+                pp = ProductParameter.objects.create(
+                    product=product, parameter_id=pid,
+                    allow_custom=custom, sort_order=order,
+                )
+            elif pp.allow_custom != custom or pp.sort_order != order:
+                pp.allow_custom, pp.sort_order = custom, order
+                pp.save(update_fields=['allow_custom', 'sort_order'])
+            self._sync_param_values(pp, values)
+        for pp in existing.values():
+            pp.delete()
 
-            flag = f'allow_custom_{kind}'
-            custom = bool(entry.get('custom'))
-            if getattr(product, flag) != custom:
-                setattr(product, flag, custom)
-                update_fields.append(flag)
-        if update_fields:
-            product.save(update_fields=update_fields)
+    @staticmethod
+    def _sync_param_values(pp, values):
+        existing = {pv.value: pv for pv in pp.values.all()}
+        for order, value in enumerate(values):
+            pv = existing.pop(value, None)
+            if pv is None:
+                ProductParamValue.objects.create(
+                    product_parameter=pp, value=value, sort_order=order,
+                )
+            elif pv.sort_order != order:
+                pv.sort_order = order
+                pv.save(update_fields=['sort_order'])
+        for pv in existing.values():
+            pv.delete()
 
     def _sync_option_tree(self, product, desired):
         """Приводит узлы товара к состоянию из формы (создание/обновление/

@@ -13,6 +13,7 @@ from .filters import ProductFilter
 from .models import (
     Category, CategoryFacet, Product, ProductOptionNode, ProductParamValue,
 )
+from .utils import natural_sort_key
 
 PAGE_SIZE = 9
 # Значения — кортежи полей для order_by. Дефолт «new» поднимает популярные
@@ -53,15 +54,16 @@ def _paginate(request, products, is_htmx):
 
 
 def _facet_config(category):
-    """Состав фасетов: (ключ, свой заголовок). Наследование вверх по дереву:
-    первая категория (от текущей к корню), у которой есть хоть одна строка
-    CategoryFacet, задаёт конфиг; показываются только её активные фасеты."""
+    """Состав фасетов: (ключ, свой заголовок, параметр). Наследование вверх
+    по дереву: первая категория (от текущей к корню), у которой есть хоть одна
+    строка CategoryFacet, задаёт конфиг; показываются только её активные
+    фасеты. Параметр заполнен только у фасета «Параметр»."""
     if category:
         for cat in [category] + list(reversed(category.get_ancestors())):
-            rows = list(cat.facets.all())
+            rows = list(cat.facets.select_related('parameter'))
             if rows:
-                return [(r.facet, r.title) for r in rows if r.is_active]
-    return [(k, '') for k in DEFAULT_FACET_KEYS]
+                return [(r.facet, r.title, r.parameter) for r in rows if r.is_active]
+    return [(k, '', None) for k in DEFAULT_FACET_KEYS]
 
 
 def _facet_ctx(request, category=None):
@@ -69,15 +71,18 @@ def _facet_ctx(request, category=None):
     значения — автоматически из дерева опций и параметров товаров раздела.
     Фасет без значений скрывается."""
     node_qs = ProductOptionNode.objects.filter(product__is_active=True)
-    param_qs = ProductParamValue.objects.filter(product__is_active=True)
+    param_qs = ProductParamValue.objects.filter(
+        product_parameter__product__is_active=True)
     if category:
         cat_ids = [c.pk for c in category.get_descendants(include_self=True)]
         node_qs = node_qs.filter(product__category_id__in=cat_ids)
-        param_qs = param_qs.filter(product__category_id__in=cat_ids)
+        param_qs = param_qs.filter(
+            product_parameter__product__category_id__in=cat_ids)
 
     titles = dict(CategoryFacet.FACET_CHOICES)
     facets = []
-    for key, custom_title in _facet_config(category):
+    for key, custom_title, parameter in _facet_config(category):
+        name, title = key, custom_title or titles[key]
         options = []
         if key == 'material':
             options = Material.objects.filter(
@@ -97,26 +102,27 @@ def _facet_ctx(request, category=None):
             ).values_list('palette__colors', flat=True)
             ids = set(manual_ids) | set(palette_color_ids)
             options = Color.objects.filter(is_active=True, pk__in=ids)
-        elif key == 'size':
-            values = param_qs.filter(kind='size').values_list('value', flat=True).distinct()
+        elif key == 'param':
+            if parameter is None or not parameter.is_active:
+                continue
+            # GET-ключ фильтра — p<id> (см. ProductFilter.filter_queryset)
+            name, title = parameter.filter_key, custom_title or parameter.name
+            values = set(
+                param_qs.filter(product_parameter__parameter=parameter)
+                .values_list('value', flat=True)
+            )
             options = [
-                {'pk': s, 'name': s}
-                for s in sorted(values, key=lambda s: (len(s), s))
-            ]
-        elif key == 'length':
-            values = param_qs.filter(kind='length').values_list('value', flat=True).distinct()
-            options = [
-                {'pk': v, 'name': f'{v} м'}
-                for v in sorted(values, key=lambda v: (len(v), v))
+                {'pk': v, 'name': parameter.format_value(v)}
+                for v in sorted(values, key=natural_sort_key)
             ]
 
         if key != 'in_stock' and not options:
             continue  # в разделе нет значений — фасет не показываем
         facets.append({
-            'name':     key,
-            'title':    custom_title or titles[key],
+            'name':     name,
+            'title':    title,
             'options':  options,
-            'selected': request.GET.getlist(key),
+            'selected': request.GET.getlist(name),
             'is_bool':  key == 'in_stock',
         })
     return {'facets': facets}
@@ -407,18 +413,28 @@ def _product_detail(request, product):
         except Exception:
             continue  # исходный файл недоступен — пропускаем
 
-    params = {'size': [], 'length': [], 'height': []}
-    for pv in product.param_values.all():
-        params.setdefault(pv.kind, []).append(pv.value)
+    # Свободные параметры в порядке товара; выключенные в справочнике скрыты
+    params = [
+        {
+            'id':           pp.parameter.pk,
+            'name':         pp.parameter.name,
+            'unit':         pp.parameter.unit,
+            'custom_label': pp.parameter.custom_label_display,
+            'example':      pp.parameter.example,
+            'values':       [v.value for v in pp.values.all()],
+            'allow_custom': pp.allow_custom,
+        }
+        for pp in product.parameters
+        .filter(parameter__is_active=True)
+        .select_related('parameter')
+        .prefetch_related('values')
+    ]
 
     product_json = {
         'name':             product.name,
         'slug':             product.slug,
         'in_stock':         product.in_stock,
         'in_stock_display': product.get_in_stock_display(),
-        'allow_custom_size':   product.allow_custom_size,
-        'allow_custom_length': product.allow_custom_length,
-        'allow_custom_height': product.allow_custom_height,
         'gallery_is_fallback': gallery_is_fallback,
     }
 

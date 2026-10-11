@@ -99,9 +99,19 @@
       // ─ Глобальная корзина (localStorage) ─
       // Позиция = товар + все выбранные параметры:
       // одно изделие в разных исполнениях — разные строки.
+      // params — [{name, value}] (длина, ширина… из справочника); size /
+      // length / height — у позиций, добавленных до справочника параметров.
+      function cartParams(i) {
+        var res = Array.isArray(i.params) ? i.params.slice() : [];
+        [['size', 'Размер'], ['length', 'Длина'], ['height', 'Высота']].forEach(function(f) {
+          if (i[f[0]]) res.push({ name: f[1], value: i[f[0]] });
+        });
+        return res;
+      }
+      window.cartParams = cartParams;
       function cartKey(i) {
-        return [i.slug, i.material, i.steel_grade, i.finish, i.color,
-                i.size, i.length, i.height, i.note]
+        var params = cartParams(i).map(function(p) { return p.name + '=' + p.value; }).join('|');
+        return [i.slug, i.material, i.steel_grade, i.finish, i.color, params, i.note]
           .map(function(v) { return v || ''; }).join('::');
       }
       Alpine.store('cart', {
@@ -243,9 +253,7 @@
                   steel_grade: i.steel_grade || null,
                   finish: i.finish || null,
                   color: i.color || null,
-                  size: i.size || null,
-                  length: i.length || null,
-                  height: i.height || null,
+                  params: cartParams(i),
                   note: i.note || null,
                 };
               });

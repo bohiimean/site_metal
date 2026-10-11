@@ -45,18 +45,19 @@ class Command(BaseCommand):
 
     def _clear(self):
         from apps.catalog.models import (
-            Category, Product, ProductImage, ProductOptionNode, ProductParamValue,
+            Category, Product, ProductImage, ProductOptionNode, ProductParameter,
         )
-        from apps.references.models import Material, SteelGrade, Finish, Color
+        from apps.references.models import Material, SteelGrade, Finish, Color, Parameter
         from apps.home.models import HomeBlock, HomeBlockItem
         from apps.pages.models import Page
 
         HomeBlockItem.objects.all().delete()
         HomeBlock.objects.all().delete()
         ProductOptionNode.objects.all().delete()
-        ProductParamValue.objects.all().delete()
+        ProductParameter.objects.all().delete()
         ProductImage.objects.all().delete()
         Product.objects.all().delete()
+        Parameter.objects.all().delete()
         Category.objects.all().delete()
         Color.objects.all().delete()
         Finish.objects.all().delete()
@@ -166,7 +167,10 @@ class Command(BaseCommand):
     # ──────────────────────────────────────────
 
     def _seed_products(self, cats, refs):
-        from apps.catalog.models import Product, ProductOptionNode, ProductParamValue
+        from apps.catalog.models import (
+            Product, ProductOptionNode, ProductParameter, ProductParamValue,
+        )
+        from apps.references.models import Parameter
 
         self.stdout.write('  Товары и опции…')
 
@@ -179,8 +183,14 @@ class Command(BaseCommand):
         dek    = refs['dek']
         c      = refs['colors']
 
+        # Флаги «своё значение» по товарам: allow_custom_length=True → {'length'}
+        custom_flags = {}
+
         def product(name, slug, cat, code='', desc='', is_new=False,
                     stock='in_stock', **flags):
+            custom = {k.removeprefix('allow_custom_') for k, v in flags.items()
+                      if k.startswith('allow_custom_') and v}
+            flags = {k: v for k, v in flags.items() if not k.startswith('allow_custom_')}
             p, _ = Product.objects.get_or_create(
                 slug=slug,
                 defaults=dict(
@@ -191,6 +201,7 @@ class Command(BaseCommand):
                     **flags,
                 ),
             )
+            custom_flags[p.pk] = custom
             return p
 
         def tree(prod, spec):
@@ -223,11 +234,36 @@ class Command(BaseCommand):
                         )
                         f_node.colors.set(colors)
 
+        # Справочник параметров: kind → (название, единица, «своё», пример, порядок)
+        param_refs = {
+            'size':   ('Размер', '',   'Свой размер', '20×20', 1),
+            'length': ('Длина',  'м',  'Своя длина',  '2.7',   2),
+            'height': ('Высота', 'мм', 'Своя высота', '40',    3),
+        }
+
+        def param_ref(kind):
+            name, unit, custom_label, example, order = param_refs[kind]
+            ref, _ = Parameter.objects.get_or_create(
+                name=name,
+                defaults=dict(unit=unit, custom_label=custom_label,
+                              example=example, sort_order=order),
+            )
+            return ref
+
         def params(prod, size=(), length=(), height=()):
+            position = 0
             for kind, values in (('size', size), ('length', length), ('height', height)):
+                custom = kind in custom_flags.get(prod.pk, ())
+                if not values and not custom:
+                    continue
+                pp, _ = ProductParameter.objects.get_or_create(
+                    product=prod, parameter=param_ref(kind),
+                    defaults={'allow_custom': custom, 'sort_order': position},
+                )
+                position += 1
                 for order, value in enumerate(values):
                     ProductParamValue.objects.get_or_create(
-                        product=prod, kind=kind, value=value,
+                        product_parameter=pp, value=value,
                         defaults={'sort_order': order},
                     )
 

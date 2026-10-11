@@ -145,6 +145,59 @@ class ColorPalette(models.Model):
         return self.name
 
 
+class Parameter(models.Model):
+    """Свободный параметр товара: длина, ширина, высота, толщина…
+
+    Справочник задаёт название, единицу и подписи; сами значения у каждого
+    товара свои (catalog.ProductParameter). Значения параметров не связаны
+    с деревом опций: невозможных сочетаний не создают. Выключенный параметр
+    пропадает с карточек и из фильтров, но у товаров не удаляется.
+    """
+    name = models.CharField('Название', max_length=100)
+    unit = models.CharField(
+        'Единица', max_length=20, blank=True,
+        help_text='Подставляется после значения на сайте: «м», «мм». '
+                  'Пусто — значение без единицы (например «20×20»).',
+    )
+    custom_label = models.CharField(
+        'Подпись своего значения', max_length=100, blank=True,
+        help_text='Кнопка на карточке, если товару разрешено своё значение: '
+                  '«Своя длина», «Свой размер». Пусто — «Своё значение».',
+    )
+    example = models.CharField(
+        'Пример значения', max_length=50, blank=True,
+        help_text='Подсказка в поле ввода: «2.7», «20×20».',
+    )
+    sort_order = models.PositiveIntegerField(
+        'Порядок', default=0,
+        help_text='Порядок в списке выбора на странице товара.',
+    )
+    is_active = models.BooleanField('Активен', default=True)
+
+    DEFAULT_CUSTOM_LABEL = 'Своё значение'
+
+    class Meta:
+        verbose_name = 'Параметр'
+        verbose_name_plural = 'Параметры товаров'
+        ordering = ['sort_order', 'name']
+
+    def __str__(self):
+        return f'{self.name}, {self.unit}' if self.unit else self.name
+
+    @property
+    def custom_label_display(self):
+        return self.custom_label or self.DEFAULT_CUSTOM_LABEL
+
+    @property
+    def filter_key(self):
+        """Имя GET-параметра фильтра каталога. По pk, а не по названию:
+        переименование параметра не ломает ссылки с фильтром."""
+        return f'p{self.pk}'
+
+    def format_value(self, value):
+        return f'{value} {self.unit}' if self.unit else str(value)
+
+
 # Живые палитры марок/материалов (MaterialColor, SteelGradeColor) удалены:
 # доступные цвета отмечаются на узле-обработке дерева опций товара
 # (catalog.ProductOptionNode.colors). ColorPalette выше — только шаблон для

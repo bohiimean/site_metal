@@ -92,14 +92,11 @@
                        x-text="[item.material, item.steel_grade, item.finish]
                          .filter(Boolean).join(' / ')"></p>
                     <p class="text-[11px] text-muted mb-2.5"
-                       x-show="item.color || item.size || item.length || item.height || item.note"
-                       x-text="[
-                         item.color  ? 'Цвет: ' + item.color     : null,
-                         item.size   ? 'Размер: ' + item.size    : null,
-                         item.length ? 'Длина: ' + item.length   : null,
-                         item.height ? 'Высота: ' + item.height  : null,
-                         item.note || null,
-                       ].filter(Boolean).join(' · ')"></p>
+                       x-show="item.color || cartParams(item).length || item.note"
+                       x-text="[item.color ? 'Цвет: ' + item.color : null]
+                         .concat(cartParams(item).map(p => p.name + ': ' + p.value))
+                         .concat([item.note || null])
+                         .filter(Boolean).join(' · ')"></p>
 
                     <div class="flex items-center justify-between">
                       <!-- Степпер количества -->
