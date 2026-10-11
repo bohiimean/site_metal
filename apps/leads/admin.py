@@ -1,3 +1,5 @@
+import json
+
 from django import forms
 from django.contrib import admin
 from django.core.exceptions import PermissionDenied
@@ -38,7 +40,8 @@ class LeadStatusAdmin(ModelAdmin):
 
 class LeadStatusFieldMixin:
     """Выбор статуса: только активные (плюс текущий, даже выключенный),
-    у поля — полоса цвета текущего статуса."""
+    у поля — полоса цвета статуса. Карта цветов (data-status-colors) нужна,
+    чтобы полоса перекрашивалась сразу при выборе (static/js/admin/lead_status.js)."""
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -56,6 +59,8 @@ class LeadStatusFieldMixin:
             widget.can_add_related = widget.can_change_related = False
             widget.can_delete_related = widget.can_view_related = False
             widget = widget.widget
+        widget.attrs['data-status-colors'] = json.dumps(
+            {str(st.pk): st.color for st in field.queryset})
         if current:
             widget.attrs['style'] = f'border-left: 6px solid {current.color}'
 
@@ -95,7 +100,7 @@ class LeadAdmin(ModelAdmin):
     ]
 
     class Media:
-        js = ['js/admin/lead_notes.js']
+        js = ['js/admin/lead_notes.js', 'js/admin/lead_status.js']
         css = {'all': ['css/admin/lead_notes.css']}
 
     def get_queryset(self, request):
