@@ -179,6 +179,7 @@
           comment: '',
           agree: false,
           agreeTerms: false,
+          nameError: false,
           phoneError: false,
           error: null,
           loading: false,
@@ -204,8 +205,14 @@
 
           async submit() {
             this.error = null;
+            this.nameError = false;
             this.phoneError = false;
 
+            if (!this.name.trim()) {
+              this.nameError = true;
+              this.error = 'Укажите имя';
+              return;
+            }
             if (this.phone.replace(/\D/g, '').length < 11) {
               this.phoneError = true;
               this.error = 'Укажите номер телефона полностью';
