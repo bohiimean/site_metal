@@ -162,6 +162,11 @@ Cron (`crontab -e` от root):
   (для ARM-хоста — `...-linux-arm64`).
 - **Docker Hub** периодически отдаёт `429 Too Many Requests` на анонимные pull —
   помогает повтор через паузу.
+- **Telegram** с этого хоста доступен только по IPv6 (IPv4 висит до таймаута).
+  Поэтому у `web` есть вторая сеть `egress6` с IPv6, а `docker/django/gai.conf`
+  (монтируется в `/etc/gai.conf`) ставит IPv6 впереди IPv4 — иначе каждое
+  уведомление ждало бы таймаут IPv4. Проверка из контейнера:
+  `docker compose -f docker-compose.prod.yml exec web python -c "import requests; print(requests.get('https://api.telegram.org', timeout=3).status_code)"`.
 - На VPS с ≤4 ГБ RAM без swap сборка ловит OOM — заведите swap (`fallocate -l
   2G /swapfile && mkswap ... && swapon ...`, в `/etc/fstab`).
 

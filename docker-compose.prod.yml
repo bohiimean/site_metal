@@ -42,12 +42,19 @@ services:
     volumes:
       - media_data:/app/media
       - static_data:/app/staticfiles
+      # IPv6 впереди IPv4 при выборе адреса — см. комментарий в файле
+      - ./docker/django/gai.conf:/etc/gai.conf:ro
     environment:
       DJANGO_SETTINGS_MODULE: config.settings.production
     env_file:
       - .env
     expose:
       - "8000"
+    # egress6 — выход в IPv6 только для web: с хостинга Telegram (уведомления
+    # о заявках) доступен лишь по IPv6. db/redis/nginx остаются в default
+    networks:
+      - default
+      - egress6
     depends_on:
       db:
         condition: service_healthy
@@ -81,6 +88,10 @@ services:
   # регистраторском (ns1.reg.ru), который единственный поддерживает API.
   # acme.sh ставит собственный cron, кладёт серт в volume certbot_certs и
   # перезагружает nginx через --reloadcmd. Полностью: см. DEPLOY.md, п.2.
+
+networks:
+  egress6:
+    enable_ipv6: true
 
 volumes:
   postgres_data:
