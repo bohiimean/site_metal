@@ -254,6 +254,14 @@ def submit_callback(request):
     name = request.POST.get('name', '')[:MAX_STR_LEN].strip()
     comment = request.POST.get('comment', '')[:MAX_STR_LEN].strip()
 
+    if not name:
+        return render(request, 'leads/_callback_form.html', {
+            'error': 'Укажите имя',
+            'name': name,
+            'phone': phone,
+            'comment': comment,
+        })
+
     if len(phone) < 5:
         return render(request, 'leads/_callback_form.html', {
             'error': 'Укажите номер телефона',
