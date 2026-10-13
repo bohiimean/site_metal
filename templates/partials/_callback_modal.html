@@ -7,7 +7,7 @@
   x-init="$watch('$store.callbackUI.open', function (v) { if (v) window.renderCaptchas && window.renderCaptchas(); })"
   @keydown.escape.window="$store.callbackUI.close()"
   @callback:close.document="$store.callbackUI.close()"
-  class="fixed inset-0 z-50 flex items-center justify-center px-4"
+  class="fixed inset-0 z-[90] flex items-center justify-center px-4"
   style="display:none">
 
   <!-- Затемнение -->

@@ -6,7 +6,7 @@
   x-show="$store.cartUI.open"
   x-init="$watch('$store.cartUI.open', function(v) { document.body.style.overflow = v ? 'hidden' : ''; })"
   @keydown.escape.window="$store.cartUI.close()"
-  class="fixed inset-0 z-50"
+  class="fixed inset-0 z-[90]"
   style="display:none">
 
   <!-- Затемнение фона -->
