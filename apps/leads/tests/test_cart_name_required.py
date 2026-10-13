@@ -56,3 +56,37 @@ class CartNameRequiredTests(TestCase):
     def test_form_marks_name_required(self):
         response = self.client.get(reverse('home'))
         self.assertContains(response, 'Имя <span class="text-accent">*</span>')
+
+
+@override_settings(**QUIET)
+class CallbackNameRequiredTests(TestCase):
+    """То же для окна «Заказать звонок»."""
+
+    def submit(self, **fields):
+        data = {'name': 'Иван', 'phone': '+7 (999) 000-00-00', 'agree': '1'}
+        data.update(fields)
+        return self.client.post(reverse('leads:submit_callback'), data)
+
+    def test_missing_name_rejected(self):
+        response = self.client.post(reverse('leads:submit_callback'),
+                                    {'phone': '+7 (999) 000-00-00', 'agree': '1'})
+        self.assertContains(response, 'Укажите имя')
+        self.assertFalse(Lead.objects.exists())
+
+    def test_whitespace_name_rejected_and_form_kept(self):
+        response = self.submit(name='   ', comment='Перезвоните после обеда')
+        self.assertContains(response, 'Укажите имя')
+        self.assertContains(response, 'Перезвоните после обеда')
+        self.assertContains(response, 'value="+7 (999) 000-00-00"')
+        self.assertFalse(Lead.objects.exists())
+
+    def test_name_saved_trimmed(self):
+        self.submit(name='  Анна  ')
+        self.assertEqual(Lead.objects.get().name, 'Анна')
+
+    def test_form_marks_name_required(self):
+        response = self.client.get(reverse('home'))
+        html = response.content.decode()
+        start = html.index('id="callback-form-area"')
+        form = html[start:html.index('</form>', start)]
+        self.assertIn('Имя <span class="text-accent">*</span>', form)
