@@ -189,6 +189,10 @@ def submit_cart(request):
     except (json.JSONDecodeError, ValueError):
         return JsonResponse({'ok': False, 'error': 'Неверный формат запроса'}, status=400)
 
+    name = str(data.get('name') or '')[:MAX_STR_LEN].strip()
+    if not name:
+        return JsonResponse({'ok': False, 'error': 'Укажите имя'})
+
     phone = str(data.get('phone') or '')[:MAX_STR_LEN].strip()
     if len(phone) < 5:
         return JsonResponse({'ok': False, 'error': 'Укажите номер телефона'})
@@ -217,7 +221,7 @@ def submit_cart(request):
 
     with transaction.atomic():
         lead = Lead.objects.create(
-            name=(str(data.get('name') or ''))[:MAX_STR_LEN].strip(),
+            name=name,
             phone=phone[:30],
             contact_method=contact_method,
             contact_value=contact_value,
