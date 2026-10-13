@@ -1,0 +1,41 @@
+{% comment %}
+Содержимое окна заметок по заявке (открывается поверх страницы, см.
+static/js/admin/lead_notes.js). data-summary / data-count — для обновления
+подписи кнопок после добавления заметки.
+{% endcomment %}
+<div class="lead-notes" data-summary="{{ summary }}" data-count="{{ count }}"
+     data-last-text="{{ last_text }}">
+  <div class="lead-notes__head">
+    <span>Заявка #{{ lead.pk }} · {{ lead.name }} — заметки</span>
+    <button type="button" class="lead-notes__close" data-lead-notes-close title="Закрыть">✕</button>
+  </div>
+
+  {% if notes %}
+    <div class="lead-notes__scroll">
+      <table class="lead-notes__table">
+        <thead><tr><th>Дата</th><th>Менеджер</th><th>Заметка</th></tr></thead>
+        <tbody>
+          {% for note in notes %}
+            <tr class="{% if note.kind == 'status' %}is-status{% endif %}">
+              <td class="lead-notes__date">{{ note.created_at|date:"d.m.Y H:i" }}</td>
+              <td>{{ note.author_name|default:"—" }}</td>
+              <td>{{ note.text|linebreaksbr }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p class="lead-notes__empty">Заметок пока нет.</p>
+  {% endif %}
+
+  {% if can_change %}
+    <form method="post" action="{{ notes_url }}" class="lead-notes__form">
+      {% csrf_token %}
+      <textarea name="text" rows="3" maxlength="{{ max_length }}" required
+                placeholder="Новая заметка… (Ctrl+Enter — добавить)">{{ text }}</textarea>
+      {% if error %}<p class="lead-notes__error">{{ error }}</p>{% endif %}
+      <button type="submit" class="lead-notes__submit">Добавить</button>
+    </form>
+  {% endif %}
+</div>

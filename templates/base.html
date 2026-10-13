@@ -49,6 +49,22 @@
   {% include "partials/_cart_drawer.html" %}
   {% include "partials/_callback_modal.html" %}
 
+  <!-- Наверх. z-index ниже дровера корзины (85) и модалок (100), чтобы
+       кнопка не висела поверх открытой панели -->
+  <button x-data="{ shown: false }"
+          x-show="shown" x-cloak x-transition.opacity
+          @scroll.window="shown = window.scrollY > 600"
+          @click="window.scrollTo({ top: 0, behavior: 'smooth' })"
+          title="Наверх" aria-label="Наверх"
+          class="fixed bottom-5 right-5 z-[70] w-10 h-10 flex items-center justify-center
+                 rounded-full bg-surface border border-border-strong shadow-md
+                 text-muted hover:text-accent hover:border-accent transition-colors">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+      <path d="M12 19V5M5 12l7-7 7 7" stroke="currentColor" stroke-width="2.2"
+            stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+  </button>
+
   <!-- Alpine.js -->
   <script>
     // Маска телефона: +7 (999) 123-45-67. Ведущие 8/7 приводятся к +7.
@@ -83,9 +99,19 @@
       // ─ Глобальная корзина (localStorage) ─
       // Позиция = товар + все выбранные параметры:
       // одно изделие в разных исполнениях — разные строки.
+      // params — [{name, value}] (длина, ширина… из справочника); size /
+      // length / height — у позиций, добавленных до справочника параметров.
+      function cartParams(i) {
+        var res = Array.isArray(i.params) ? i.params.slice() : [];
+        [['size', 'Размер'], ['length', 'Длина'], ['height', 'Высота']].forEach(function(f) {
+          if (i[f[0]]) res.push({ name: f[1], value: i[f[0]] });
+        });
+        return res;
+      }
+      window.cartParams = cartParams;
       function cartKey(i) {
-        return [i.slug, i.material, i.steel_grade, i.finish, i.color,
-                i.size, i.length, i.height, i.note]
+        var params = cartParams(i).map(function(p) { return p.name + '=' + p.value; }).join('|');
+        return [i.slug, i.material, i.steel_grade, i.finish, i.color, params, i.note]
           .map(function(v) { return v || ''; }).join('::');
       }
       Alpine.store('cart', {
@@ -152,6 +178,7 @@
           contactValue: '',
           comment: '',
           agree: false,
+          agreeTerms: false,
           phoneError: false,
           error: null,
           loading: false,
@@ -196,6 +223,10 @@
               this.error = 'Необходимо согласие на обработку персональных данных';
               return;
             }
+            if (!this.agreeTerms) {
+              this.error = 'Необходимо принять условия продажи';
+              return;
+            }
 
             // Токен SmartCaptcha — из скрытого поля, которое виджет
             // добавляет в свой контейнер (если капча включена)
@@ -222,9 +253,7 @@
                   steel_grade: i.steel_grade || null,
                   finish: i.finish || null,
                   color: i.color || null,
-                  size: i.size || null,
-                  length: i.length || null,
-                  height: i.height || null,
+                  params: cartParams(i),
                   note: i.note || null,
                 };
               });
@@ -241,6 +270,7 @@
                   contact_value: this.contactMethod === 'phone' ? '' : this.contactValue.trim(),
                   comment: this.comment.trim(),
                   agree: this.agree,
+                  agree_terms: this.agreeTerms,
                   captcha_token: captchaToken,
                   cart_snapshot: items,
                 }),

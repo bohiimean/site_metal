@@ -127,10 +127,12 @@ class Command(BaseCommand):
         from apps.references.models import Color
         self.stdout.write(f'  Создаю {len(RAL_COLORS)} RAL-цветов…')
         result = {}
+        # По RAL-коду и без перезаписи: если каталог уже загружен
+        # import_ral, берём его цвета, а не плодим дубли с тестовыми именами
         for name, hex_code, ral_code, group in RAL_COLORS:
-            obj, _ = Color.objects.update_or_create(
-                name=name,
-                defaults={'hex_code': hex_code, 'ral_code': ral_code, 'color_group': group},
+            obj, _ = Color.objects.get_or_create(
+                ral_code=ral_code,
+                defaults={'name': name, 'hex_code': hex_code, 'color_group': group},
             )
             result[name] = obj
         return result

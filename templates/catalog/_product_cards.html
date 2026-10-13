@@ -1,3 +1,8 @@
+{% comment %}
+Фрагмент догрузки каталога: карточки следующей страницы + обновлённая
+кнопка «Показать ещё» (out-of-band — она живёт вне сетки).
+{% endcomment %}
 {% for product in page_obj %}
   {% include "catalog/_product_card.html" %}
 {% endfor %}
+{% include "catalog/_load_more.html" with oob=True target="#product-list" include="#filter-form" %}

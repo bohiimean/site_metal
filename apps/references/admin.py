@@ -1,7 +1,8 @@
 from django.contrib import admin
+from django.db.models import Count
 from unfold.admin import ModelAdmin
 
-from .models import Material, SteelGrade, Finish, Color, ColorPalette
+from .models import Material, SteelGrade, Finish, Color, ColorPalette, Parameter
 
 
 @admin.register(Material)
@@ -64,3 +65,20 @@ class ColorPaletteAdmin(ModelAdmin):
         # Сколько обработок товаров ссылается на палитру — «радиус» правки
         return obj.option_nodes.count()
     usage_count.short_description = 'Используется (обработок)'
+
+
+@admin.register(Parameter)
+class ParameterAdmin(ModelAdmin):
+    list_display  = ['name', 'unit', 'custom_label', 'example',
+                     'sort_order', 'usage_count', 'is_active']
+    list_editable = ['sort_order', 'is_active']
+    search_fields = ['name']
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).annotate(_usage=Count('product_links'))
+
+    def usage_count(self, obj):
+        # Параметр с товарами удалить нельзя (PROTECT) — только выключить
+        return obj._usage
+    usage_count.short_description = 'Товаров'
+    usage_count.admin_order_field = '_usage'

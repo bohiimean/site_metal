@@ -1,6 +1,6 @@
 import json
 
-from django.core.paginator import Paginator
+from django.core.paginator import Page, Paginator
 from django.db.models import Q
 from django.http import Http404
 from django.shortcuts import render
@@ -13,6 +13,7 @@ from .filters import ProductFilter
 from .models import (
     Category, CategoryFacet, Product, ProductOptionNode, ProductParamValue,
 )
+from .utils import natural_sort_key
 
 PAGE_SIZE = 9
 # Значения — кортежи полей для order_by. Дефолт «new» поднимает популярные
@@ -35,16 +36,34 @@ def _product_qs():
     return Product.objects.for_cards()
 
 
+def _paginate(request, products, is_htmx):
+    """Страница выдачи для каталога и поиска.
+
+    Номер за пределами диапазона в htmx-догрузке отдаёт пустую страницу:
+    Paginator.get_page() вернул бы последнюю, и кнопка «Показать ещё»
+    бесконечно повторяла бы хвост выдачи.
+    """
+    paginator = Paginator(products, PAGE_SIZE)
+    try:
+        page_num = int(request.GET.get('page', 1))
+    except (ValueError, TypeError):
+        page_num = 1
+    if is_htmx and not 1 <= page_num <= paginator.num_pages:
+        return Page([], page_num, paginator), paginator
+    return paginator.get_page(page_num), paginator
+
+
 def _facet_config(category):
-    """Состав фасетов: (ключ, свой заголовок). Наследование вверх по дереву:
-    первая категория (от текущей к корню), у которой есть хоть одна строка
-    CategoryFacet, задаёт конфиг; показываются только её активные фасеты."""
+    """Состав фасетов: (ключ, свой заголовок, параметр). Наследование вверх
+    по дереву: первая категория (от текущей к корню), у которой есть хоть одна
+    строка CategoryFacet, задаёт конфиг; показываются только её активные
+    фасеты. Параметр заполнен только у фасета «Параметр»."""
     if category:
         for cat in [category] + list(reversed(category.get_ancestors())):
-            rows = list(cat.facets.all())
+            rows = list(cat.facets.select_related('parameter'))
             if rows:
-                return [(r.facet, r.title) for r in rows if r.is_active]
-    return [(k, '') for k in DEFAULT_FACET_KEYS]
+                return [(r.facet, r.title, r.parameter) for r in rows if r.is_active]
+    return [(k, '', None) for k in DEFAULT_FACET_KEYS]
 
 
 def _facet_ctx(request, category=None):
@@ -52,15 +71,18 @@ def _facet_ctx(request, category=None):
     значения — автоматически из дерева опций и параметров товаров раздела.
     Фасет без значений скрывается."""
     node_qs = ProductOptionNode.objects.filter(product__is_active=True)
-    param_qs = ProductParamValue.objects.filter(product__is_active=True)
+    param_qs = ProductParamValue.objects.filter(
+        product_parameter__product__is_active=True)
     if category:
         cat_ids = [c.pk for c in category.get_descendants(include_self=True)]
         node_qs = node_qs.filter(product__category_id__in=cat_ids)
-        param_qs = param_qs.filter(product__category_id__in=cat_ids)
+        param_qs = param_qs.filter(
+            product_parameter__product__category_id__in=cat_ids)
 
     titles = dict(CategoryFacet.FACET_CHOICES)
     facets = []
-    for key, custom_title in _facet_config(category):
+    for key, custom_title, parameter in _facet_config(category):
+        name, title = key, custom_title or titles[key]
         options = []
         if key == 'material':
             options = Material.objects.filter(
@@ -80,26 +102,27 @@ def _facet_ctx(request, category=None):
             ).values_list('palette__colors', flat=True)
             ids = set(manual_ids) | set(palette_color_ids)
             options = Color.objects.filter(is_active=True, pk__in=ids)
-        elif key == 'size':
-            values = param_qs.filter(kind='size').values_list('value', flat=True).distinct()
+        elif key == 'param':
+            if parameter is None or not parameter.is_active:
+                continue
+            # GET-ключ фильтра — p<id> (см. ProductFilter.filter_queryset)
+            name, title = parameter.filter_key, custom_title or parameter.name
+            values = set(
+                param_qs.filter(product_parameter__parameter=parameter)
+                .values_list('value', flat=True)
+            )
             options = [
-                {'pk': s, 'name': s}
-                for s in sorted(values, key=lambda s: (len(s), s))
-            ]
-        elif key == 'length':
-            values = param_qs.filter(kind='length').values_list('value', flat=True).distinct()
-            options = [
-                {'pk': v, 'name': f'{v} м'}
-                for v in sorted(values, key=lambda v: (len(v), v))
+                {'pk': v, 'name': parameter.format_value(v)}
+                for v in sorted(values, key=natural_sort_key)
             ]
 
         if key != 'in_stock' and not options:
             continue  # в разделе нет значений — фасет не показываем
         facets.append({
-            'name':     key,
-            'title':    custom_title or titles[key],
+            'name':     name,
+            'title':    title,
             'options':  options,
-            'selected': request.GET.getlist(key),
+            'selected': request.GET.getlist(name),
             'is_bool':  key == 'in_stock',
         })
     return {'facets': facets}
@@ -123,15 +146,10 @@ def search_view(request):
     sort = request.GET.get('sort', 'new')
     products = products.order_by(*SORT_MAP.get(sort, DEFAULT_SORT))
 
-    paginator = Paginator(products, PAGE_SIZE)
-    try:
-        page_num = int(request.GET.get('page', 1))
-    except (ValueError, TypeError):
-        page_num = 1
-    page_obj = paginator.get_page(page_num)
+    is_htmx = request.headers.get('HX-Request') == 'true'
+    page_obj, paginator = _paginate(request, products, is_htmx)
 
     suggestions = Category.objects.filter(is_active=True, depth=1).order_by('path')[:3]
-    is_htmx = request.headers.get('HX-Request') == 'true'
 
     ctx = {
         'q': q,
@@ -143,8 +161,8 @@ def search_view(request):
         **_facet_ctx(request),
     }
 
-    if is_htmx and page_num > 1:
-        return render(request, 'catalog/_product_cards.html', ctx)
+    if is_htmx and page_obj.number > 1:
+        return render(request, 'catalog/_search_cards.html', ctx)
     if is_htmx:
         return render(request, 'catalog/_search_grid.html', ctx)
     return render(request, 'catalog/search.html', ctx)
@@ -193,14 +211,8 @@ def _render_catalog(request, category):
     sort = request.GET.get('sort', 'new')
     products = products.order_by(*SORT_MAP.get(sort, DEFAULT_SORT))
 
-    paginator = Paginator(products, PAGE_SIZE)
-    try:
-        page_num = int(request.GET.get('page', 1))
-    except (ValueError, TypeError):
-        page_num = 1
-    page_obj = paginator.get_page(page_num)
-
     is_htmx = request.headers.get('HX-Request') == 'true'
+    page_obj, paginator = _paginate(request, products, is_htmx)
 
     ctx = {
         'page_obj':          page_obj,
@@ -212,7 +224,7 @@ def _render_catalog(request, category):
         **_facet_ctx(request, category),
     }
 
-    if is_htmx and page_num > 1:
+    if is_htmx and page_obj.number > 1:
         return render(request, 'catalog/_product_cards.html', ctx)
     if is_htmx:
         return render(request, 'catalog/_product_grid.html', ctx)
@@ -339,12 +351,16 @@ def _option_tree(product):
 
 
 def _photo_rules(product):
-    """Фото-правила для клиентского подбора: условия + URL пресетов."""
-    rules = []
+    """Фото-правила для клиентского подбора: условия + ракурсы.
+
+    Фото с одинаковыми условиями — ракурсы одного исполнения: собираем их
+    в один набор в порядке sort_order.
+    """
+    rules = {}
     qs = (
         product.images.overrides()
-        .select_related('color')
-        .order_by('sort_order')
+        .select_related('material', 'finish', 'color')
+        .order_by('sort_order', 'pk')
     )
     for img in qs:
         try:
@@ -355,22 +371,33 @@ def _photo_rules(product):
                 'zoom':    img.zoom.url,
             }
         except Exception:
-            continue  # исходный файл недоступен — правило пропускаем
-        rules.append({
+            continue  # исходный файл недоступен — фото пропускаем
+        key = (img.material_id, img.finish_id, img.color_id, img.color_group)
+        rule = rules.setdefault(key, {
             'material_id': img.material_id,
             'finish_id':   img.finish_id,
             'color_id':    img.color_id,
             'color_group': img.color_group or None,
-            'urls':        urls,
+            # Для пометки «Фото другого исполнения: …», когда своего фото нет
+            'label': ' · '.join(filter(None, [
+                img.material and img.material.name,
+                img.finish and img.finish.name,
+                img.color.name if img.color else img.get_color_group_display(),
+            ])),
+            'images':      [],
         })
-    return rules
+        rule['images'].append(urls)
+    return list(rules.values())
 
 
 def _product_detail(request, product):
     # Миниатюры: обычные фото галереи; если менеджер загрузил только
-    # фото-правила — показываем их, чтобы карточка не оставалась без фото
+    # фото-правила — показываем их, чтобы карточка не оставалась без фото.
+    # Флаг нужен клиенту: такую подмену не дописывать после ракурсов
+    # исполнения, иначе фото задублируются
     images = list(product.images.gallery().order_by('sort_order'))
-    if not images:
+    gallery_is_fallback = not images
+    if gallery_is_fallback:
         images = list(product.images.overrides().order_by('sort_order'))
 
     # Данные изображений для Alpine (смена фото, srcset, лайтбокс).
@@ -386,18 +413,29 @@ def _product_detail(request, product):
         except Exception:
             continue  # исходный файл недоступен — пропускаем
 
-    params = {'size': [], 'length': [], 'height': []}
-    for pv in product.param_values.all():
-        params.setdefault(pv.kind, []).append(pv.value)
+    # Свободные параметры в порядке товара; выключенные в справочнике скрыты
+    params = [
+        {
+            'id':           pp.parameter.pk,
+            'name':         pp.parameter.name,
+            'unit':         pp.parameter.unit,
+            'custom_label': pp.parameter.custom_label_display,
+            'example':      pp.parameter.example,
+            'values':       [v.value for v in pp.values.all()],
+            'allow_custom': pp.allow_custom,
+        }
+        for pp in product.parameters
+        .filter(parameter__is_active=True)
+        .select_related('parameter')
+        .prefetch_related('values')
+    ]
 
     product_json = {
         'name':             product.name,
         'slug':             product.slug,
         'in_stock':         product.in_stock,
         'in_stock_display': product.get_in_stock_display(),
-        'allow_custom_size':   product.allow_custom_size,
-        'allow_custom_length': product.allow_custom_length,
-        'allow_custom_height': product.allow_custom_height,
+        'gallery_is_fallback': gallery_is_fallback,
     }
 
     return render(request, 'catalog/product_detail.html', {
@@ -408,5 +446,7 @@ def _product_detail(request, product):
         'tree_json':         _option_tree(product),
         'params_json':       params,
         'photo_rules_json':  _photo_rules(product),
+        'color_groups_json': Color.COLOR_GROUP_CHOICES,
         'schema_org':        _schema_org(request, product, images),
+        'related_products':  product.get_related(),
     })

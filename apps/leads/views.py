@@ -11,8 +11,9 @@ from django.views.decorators.http import require_POST
 from django_ratelimit.decorators import ratelimit
 
 from apps.catalog.models import Product
+from apps.pages.models import PRIVACY_SLUG, TERMS_SLUG, Page
 from .captcha import client_ip, verify_captcha
-from .models import Lead
+from .models import LEGACY_PARAM_FIELDS, Lead, cart_item_params
 
 logger = logging.getLogger(__name__)
 
@@ -21,15 +22,41 @@ MAX_CART_ITEMS = 100
 MAX_QTY_PER_ITEM = 999
 MAX_STR_LEN = 500
 
-# Выбранные параметры позиции — читаемые строки (SKU в системе нет)
-PARAM_FIELDS = ['material', 'steel_grade', 'finish', 'color',
-                'size', 'length', 'height']
+# Выбранные опции позиции — читаемые строки (SKU в системе нет)
+PARAM_FIELDS = ['material', 'steel_grade', 'finish', 'color']
+# Свободные параметры (длина, ширина…) — список [{name, value}]
+MAX_PARAMS_PER_ITEM = 20
+MAX_PARAM_NAME_LEN = 100
+MAX_PARAM_VALUE_LEN = 200
+
+
+def _clean_params(raw):
+    """Параметры позиции из клиентских данных: [{name, value}] читаемыми
+    строками. Старая корзина (до справочника) присылает size/length/height —
+    они переводятся в тот же формат."""
+    params = []
+    items = raw.get('params')
+    for p in items if isinstance(items, list) else []:
+        if not isinstance(p, dict):
+            continue
+        name, value = p.get('name'), p.get('value')
+        if not isinstance(name, str) or not isinstance(value, (str, int, float)):
+            continue
+        name = name.strip()[:MAX_PARAM_NAME_LEN]
+        value = str(value).strip()[:MAX_PARAM_VALUE_LEN]
+        if name and value:
+            params.append({'name': name, 'value': value})
+    for field, label in LEGACY_PARAM_FIELDS:
+        value = str(raw.get(field) or '').strip()[:MAX_PARAM_VALUE_LEN]
+        if value:
+            params.append({'name': label, 'value': value})
+    return params[:MAX_PARAMS_PER_ITEM]
 
 
 def _build_cart_snapshot(client_items):
     """Строит cart_snapshot из клиентских данных; название товара берёт из БД
-    по slug. Параметры (материал/марка/обработка/цвет/размер/длина/высота) —
-    читаемые строки выбора клиента: слепок не ломается при правках каталога.
+    по slug. Параметры (материал/марка/обработка/цвет, свободные параметры
+    вроде длины и ширины) — читаемые строки выбора клиента: слепок не ломается при правках каталога.
     Цены нет — её называет менеджер. Если slug не найден — позиция всё равно
     сохраняется с пометкой, чтобы менеджер видел, что клиент пытался заказать.
     """
@@ -51,10 +78,12 @@ def _build_cart_snapshot(client_items):
             f: str(raw.get(f) or '')[:200].strip() or None
             for f in PARAM_FIELDS
         }
+        free_params = _clean_params(raw)
         # note — свободный комментарий (например, «свой цвет: RAL 6005»)
         note = str(raw.get('note') or '')[:MAX_STR_LEN].strip() or None
 
-        key = (slug, note, *params.values())
+        key = (slug, note, *params.values(),
+               tuple((p['name'], p['value']) for p in free_params))
         if key in seen_keys:
             continue
         seen_keys.add(key)
@@ -65,7 +94,8 @@ def _build_cart_snapshot(client_items):
             qty = 1
         qty = max(1, min(qty, MAX_QTY_PER_ITEM))
 
-        normalized.append({'slug': slug, 'qty': qty, 'note': note, **params})
+        normalized.append({'slug': slug, 'qty': qty, 'note': note,
+                           'params': free_params, **params})
 
     if not normalized:
         return []
@@ -90,7 +120,7 @@ def _build_cart_snapshot(client_items):
             # Сохраняем факт запроса для менеджера.
             row['name'] = '⚠ Товар не найден в каталоге'
             row['is_active'] = False
-        for f in PARAM_FIELDS + ['note']:
+        for f in PARAM_FIELDS + ['params', 'note']:
             if it[f]:
                 row[f] = it[f]
         snapshot.append(row)
@@ -116,10 +146,7 @@ def _send_telegram(lead_id):
                     if it.get(f)
                 )
                 dims = ' · '.join(
-                    f'{label} {it[f]}' for f, label in
-                    (('size', 'размер'), ('length', 'длина'), ('height', 'высота'))
-                    if it.get(f)
-                )
+                    f'{name} {value}' for name, value in cart_item_params(it))
                 return (
                     f"• {e(str(it.get('name', '?')))} × {int(it.get('qty', 1))}"
                     + (f"\n   ⚙ {e(spec)}" if spec else '')
@@ -171,6 +198,11 @@ def submit_cart(request):
             {'ok': False, 'error': 'Необходимо согласие на обработку персональных данных'}
         )
 
+    if not data.get('agree_terms'):
+        return JsonResponse(
+            {'ok': False, 'error': 'Необходимо принять условия продажи'}
+        )
+
     if not verify_captcha(str(data.get('captcha_token') or ''), client_ip(request)):
         return JsonResponse(
             {'ok': False, 'error': 'Не пройдена проверка «Я не робот». Попробуйте ещё раз.'}
@@ -192,7 +224,10 @@ def submit_cart(request):
             comment=(str(data.get('comment') or ''))[:MAX_STR_LEN].strip(),
             cart_snapshot=cart_snapshot,
             source='cart',
-            consent_pdn=bool(data.get('agree')),
+            consent_pdn=True,
+            pdn_revision=Page.current_revision_of(PRIVACY_SLUG),
+            consent_terms=True,
+            terms_revision=Page.current_revision_of(TERMS_SLUG),
         )
         lead_id = lead.pk
         transaction.on_commit(lambda: _send_telegram(lead_id))
@@ -247,7 +282,9 @@ def submit_callback(request):
             comment=comment,
             cart_snapshot=[],
             source='callback_request',
-            consent_pdn=bool(request.POST.get('agree')),
+            # Звонок — не покупка: условия продажи здесь не принимаются
+            consent_pdn=True,
+            pdn_revision=Page.current_revision_of(PRIVACY_SLUG),
         )
         lead_id = lead.pk
         transaction.on_commit(lambda: _send_telegram(lead_id))

@@ -12,12 +12,12 @@
 {{ tree_json|json_script:"tree-data" }}
 {{ params_json|json_script:"params-data" }}
 {{ photo_rules_json|json_script:"photo-rules-data" }}
+{{ color_groups_json|json_script:"color-groups-data" }}
 {% endblock %}
 
 {% block content %}
 <div class="max-w-7xl mx-auto px-6 lg:px-12 py-6"
-     x-data="productOptions()"
-     x-init="init()">
+     x-data="productOptions()">
 
   <!-- Хлебные крошки -->
   <nav class="text-[11px] text-muted mb-6 flex items-center gap-1.5 whitespace-nowrap overflow-x-auto scrollbar-none">
@@ -34,6 +34,15 @@
     <span class="text-primary">{{ product.name }}</span>
   </nav>
 
+  <!-- Название — над обеими колонками: заголовок в правой колонке
+       перевешивал вёрстку вправо, а на мобиле уезжал под фото -->
+  <div class="mb-6">
+    <h1 class="text-[26px] font-bold text-primary leading-[1.3] mb-1.5">{{ product.name }}</h1>
+    {% if product.profile_code %}
+      <p class="text-[12px] text-muted">{{ product.profile_code }}</p>
+    {% endif %}
+  </div>
+
   <div class="grid grid-cols-1 lg:grid-cols-[520px_1fr] gap-11">
 
     <!-- ─── Изображения ─── -->
@@ -42,7 +51,8 @@
            длинный предмет не обрезается. Клик — раскрытие на весь экран. -->
       <!-- Бокс намеренно ничем не выделен (без фона-подложки и обводки):
            белый фон товарных фото сливается со страницей -->
-      <div class="group relative overflow-hidden aspect-[4/3] lg:aspect-auto lg:h-[420px]">
+      <div class="group relative overflow-hidden aspect-[4/3] lg:aspect-auto lg:h-[420px]"
+           @touchstart.passive="touchStart($event)" @touchend="touchEnd($event)">
         <template x-if="displayImage">
           <img :src="displayImage" :srcset="displaySrcset"
                sizes="(min-width:1024px) 520px, 100vw"
@@ -64,6 +74,26 @@
           {% endif %}
         </template>
 
+        <!-- Фото выбранного исполнения нет — показано ближайшее -->
+        <template x-if="nearestRule">
+          <span class="absolute top-3 left-3 max-w-[80%] px-2.5 py-1 rounded-sm bg-black/60 text-white text-[11px] leading-snug pointer-events-none"
+                x-text="'Фото другого исполнения: ' + nearestRule.label"></span>
+        </template>
+
+        <!-- Листание ракурсов (на телефоне — свайпом) -->
+        <template x-if="galleryList.length > 1">
+          <div>
+            <button @click="showImage(-1)" title="Предыдущее фото" aria-label="Предыдущее фото"
+                    class="hidden lg:flex absolute left-2 top-1/2 -translate-y-1/2 w-9 h-9 items-center justify-center rounded-full bg-surface/85 backdrop-blur border border-border text-muted opacity-0 group-hover:opacity-100 transition-opacity hover:text-accent">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <button @click="showImage(1)" title="Следующее фото" aria-label="Следующее фото"
+                    class="hidden lg:flex absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 items-center justify-center rounded-full bg-surface/85 backdrop-blur border border-border text-muted opacity-0 group-hover:opacity-100 transition-opacity hover:text-accent">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+          </div>
+        </template>
+
         <!-- Кнопка-подсказка «развернуть» -->
         <template x-if="displayImage">
           <button @click="lightboxOpen = true" title="Открыть на весь экран"
@@ -73,21 +103,15 @@
             </svg>
           </button>
         </template>
-
-        <!-- Подпись поверх фото (на подложке — фон может быть светлым) -->
-        <div class="absolute bottom-2 left-2 right-2 pointer-events-none">
-          <span x-show="photoCaption" x-cloak
-                class="inline-block text-[10px] font-mono text-muted bg-surface/80 backdrop-blur px-2 py-1 rounded-sm"
-                x-text="photoCaption"></span>
-        </div>
       </div>
 
       <!-- Миниатюры галереи -->
-      <template x-if="images.length > 1">
-        <div class="flex gap-2 mt-3 overflow-x-auto scrollbar-none">
-          <template x-for="(img, i) in images" :key="i">
+      <!-- При выбранном исполнении — его ракурсы, затем общие фото -->
+      <template x-if="galleryList.length > 1">
+        <div class="flex gap-2 mt-3 p-0.5 overflow-x-auto scrollbar-none">
+          <template x-for="(img, i) in galleryList" :key="i + img.thumb">
             <button @click="selectImageIndex(i)"
-                    :class="activeIndex === i && !ruleImage
+                    :class="shownIndex === i
                       ? 'ring-2 ring-accent'
                       : 'ring-1 ring-border hover:ring-accent/50'"
                     class="w-16 h-16 shrink-0 rounded-sm overflow-hidden transition-shadow">
@@ -101,22 +125,14 @@
     <!-- ─── Информация о товаре ─── -->
     <div class="flex flex-col gap-[22px]">
 
-      <!-- Название -->
-      <div>
-        <h1 class="text-[26px] font-bold text-primary leading-[1.3] mb-2.5">{{ product.name }}</h1>
-        {% if product.profile_code %}
-          <p class="text-[12px] text-muted">{{ product.profile_code }}</p>
-        {% endif %}
-      </div>
-
       <!-- Цена по запросу + наличие -->
       <div>
         <div class="flex items-baseline gap-2.5">
-          <span class="text-[22px] font-black text-primary leading-none">Цена по запросу</span>
+          <span class="text-[22px] font-black text-primary leading-none">{{ site.price_label }}</span>
         </div>
-        <p class="text-[12px] text-muted mt-1.5">
-          Точную стоимость рассчитает менеджер после отправки заявки
-        </p>
+        {% if site.price_note %}
+          <p class="text-[12px] text-muted mt-1.5">{{ site.price_note }}</p>
+        {% endif %}
         <span class="inline-block mt-1.5 text-[11px] font-medium px-2 py-0.5 rounded-sm
           {% if product.in_stock == 'in_stock' %}bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400
           {% elif product.in_stock == 'on_order' %}bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400
@@ -329,7 +345,7 @@
         </div>
       </template>
 
-      <!-- ── Свободные параметры: размер / длина / высота ── -->
+      <!-- ── Свободные параметры из справочника (длина, ширина…) ── -->
       <template x-for="param in paramConfigs" :key="param.kind">
         <div x-show="param.values.length > 0 || param.allowCustom">
           <p class="text-[12px] font-semibold text-primary mb-2.5">
@@ -383,31 +399,66 @@
 
       <!-- Описание -->
       {% if product.description %}
-      <div class="border-t border-border pt-5">
-        <p class="text-[13px] text-muted leading-relaxed">{{ product.description }}</p>
+      <!-- Описание — обычный текст: переносы и абзацы менеджера сохраняем -->
+      <div class="border-t border-border pt-5 text-[13px] text-muted leading-relaxed space-y-3">
+        {{ product.description|linebreaks }}
       </div>
       {% endif %}
 
     </div>
   </div>
 
-  <!-- ─── Просмотр фото: модалка по центру ─── -->
+  {% if related_products %}
+    <section class="mt-14 border-t border-border pt-9">
+      <h2 class="text-[18px] font-bold text-primary mb-5">С этим также покупают</h2>
+      {% comment %}
+      Подборка задаётся на товаре в админке; пусто — берутся товары той же
+      категории. В цикле переменная product перекрывает текущий товар только
+      внутри блока — карточке нужна именно она.
+      {% endcomment %}
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        {% for product in related_products %}
+          {% include "catalog/_product_card.html" %}
+        {% endfor %}
+      </div>
+    </section>
+  {% endif %}
+
+  <!-- ─── Просмотр фото: во весь экран ─── -->
+  <!-- Раньше это была модалка шириной 640px — при фото в блоке 520px
+       увеличение выходило ~1.2×, «то же самое». Пресет zoom (2000px по
+       большей стороне) позволяет показать фото на весь экран. -->
   <div x-show="lightboxOpen" x-cloak
        x-transition.opacity
        @keydown.escape.window="lightboxOpen = false"
+       @keydown.arrow-left.window="lightboxOpen && showImage(-1)"
+       @keydown.arrow-right.window="lightboxOpen && showImage(1)"
+       @touchstart.passive="touchStart($event)" @touchend="touchEnd($event)"
        @click="lightboxOpen = false"
-       class="fixed inset-0 z-[100] bg-black/70 flex items-center justify-center p-4">
-    <div @click.stop x-show="lightboxOpen" x-transition
-         class="relative bg-surface rounded-lg shadow-2xl p-4 max-w-[640px] w-full">
-      <img :src="displayZoom" :alt="'{{ product.name|escapejs }}'"
-           class="w-full max-h-[70vh] object-contain">
-      <button @click="lightboxOpen = false" title="Закрыть"
-              class="absolute -top-3 -right-3 w-9 h-9 flex items-center justify-center rounded-full bg-surface border border-border shadow-md text-muted hover:text-accent transition-colors">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-          <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
-        </svg>
-      </button>
-    </div>
+       class="fixed inset-0 z-[100] bg-black/85 flex items-center justify-center p-3 sm:p-8">
+    <img x-show="lightboxOpen" x-transition
+         :src="displayZoom" :alt="'{{ product.name|escapejs }}'"
+         class="max-w-full max-h-full w-auto h-auto object-contain rounded-sm bg-surface cursor-zoom-out">
+    <template x-if="galleryList.length > 1">
+      <div>
+        <button @click.stop="showImage(-1)" title="Предыдущее фото" aria-label="Предыдущее фото"
+                class="absolute left-3 sm:left-6 top-1/2 -translate-y-1/2 w-11 h-11 flex items-center justify-center rounded-full bg-surface/90 border border-border shadow-md text-muted hover:text-accent transition-colors">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <button @click.stop="showImage(1)" title="Следующее фото" aria-label="Следующее фото"
+                class="absolute right-3 sm:right-6 top-1/2 -translate-y-1/2 w-11 h-11 flex items-center justify-center rounded-full bg-surface/90 border border-border shadow-md text-muted hover:text-accent transition-colors">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <span class="absolute bottom-4 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-black/60 text-[12px] font-medium text-white tabular-nums"
+              x-text="(shownIndex + 1) + ' / ' + galleryList.length"></span>
+      </div>
+    </template>
+    <button @click="lightboxOpen = false" title="Закрыть"
+            class="absolute top-4 right-4 w-10 h-10 flex items-center justify-center rounded-full bg-surface/90 border border-border shadow-md text-muted hover:text-accent transition-colors">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+        <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+      </svg>
+    </button>
   </div>
 </div>
 
@@ -416,19 +467,21 @@ function productOptions() {
   return {
     product:    {},
     tree:       [],   // [{material_id, name, grades:[{grade_id, name, finishes:[...]}], finishes:[...]}]
-    params:     {},   // {size: [...], length: [...], height: [...]}
+    params:     [],   // [{id, name, unit, custom_label, example, values, allow_custom}]
     photoRules: [],   // [{material_id, finish_id, color_id, color_group, urls}]
+    colorGroups: [],  // [[key, label]] — группы цветов RAL-палитры
     images:     [],   // [{thumb, gallery, zoom}] — галерея товара
 
     // Выбор: справочные id дерева + значения свободных параметров
     sel:       { material_id: null, grade_id: null, finish_id: null },
     selColor:  null,
-    selParams: { size: null, length: null, height: null },
+    // Ключ — id параметра справочника
+    selParams:    {},
+    customActive: {},
+    customValues: {},
 
-    customActive: { size: false, length: false, height: false },
-    customValues: { size: '',   length: '',    height: '' },
-
-    activeIndex:  0,
+    activeIndex:  0,     // номер фото в galleryList (ракурс исполнения)
+    touch:        null,  // начало свайпа по фото: {x, y}
     lightboxOpen: false,
 
     // RAL-палитра
@@ -447,11 +500,30 @@ function productOptions() {
       this.product    = JSON.parse(document.getElementById('product-data').textContent);
       this.tree       = JSON.parse(document.getElementById('tree-data').textContent);
       this.params     = JSON.parse(document.getElementById('params-data').textContent);
+      this.params.forEach(p => {
+        this.selParams[p.id] = null;
+        this.customActive[p.id] = false;
+        this.customValues[p.id] = '';
+      });
       this.photoRules = JSON.parse(document.getElementById('photo-rules-data').textContent);
+      this.colorGroups = JSON.parse(document.getElementById('color-groups-data').textContent);
 
-      // Предзагрузка фото-правил, чтобы переключение не мигало
+      // Смена исполнения: смотрели ракурс — остаёмся на ракурсе с тем же
+      // номером (у нового исполнения его нет — на первый); смотрели общее
+      // фото (чертёж) — остаёмся на нём, хотя ракурсов перед ним стало
+      // больше или меньше. Исполнение появилось впервые — его первый ракурс.
+      this.$watch('ruleSet', (set, old) => {
+        if (!old) { this.activeIndex = 0; return; }
+        const oldLen = old.length, newLen = set ? set.length : 0;
+        const i = this.activeIndex;
+        this.activeIndex = i < oldLen ? (i < newLen ? i : 0) : newLen + (i - oldLen);
+      });
+
+      // Предзагрузка первого ракурса каждого исполнения, чтобы переключение
+      // не мигало; остальные ракурсы грузятся при листании
       this.photoRules.forEach(r => {
-        if (r.urls.gallery) { const img = new Image(); img.src = r.urls.gallery; }
+        const first = r.images[0];
+        if (first && first.gallery) { const img = new Image(); img.src = first.gallery; }
       });
 
       // Инициализация из URL (шаринг ссылки на исполнение) или дефолты
@@ -461,9 +533,7 @@ function productOptions() {
         grade_id:    parseInt(q.get('grade'), 10)    || null,
         finish_id:   parseInt(q.get('finish'), 10)   || null,
         color_id:    parseInt(q.get('color'), 10)    || null,
-        size:   q.get('size'),
-        length: q.get('length'),
-        height: q.get('height'),
+        params:      this._paramsFromQuery(q),
       });
       this._syncUrl(true);
 
@@ -475,9 +545,7 @@ function productOptions() {
           grade_id:    parseInt(p.get('grade'), 10)    || null,
           finish_id:   parseInt(p.get('finish'), 10)   || null,
           color_id:    parseInt(p.get('color'), 10)    || null,
-          size:   p.get('size'),
-          length: p.get('length'),
-          height: p.get('height'),
+          params:      this._paramsFromQuery(p),
         });
       });
     },
@@ -499,12 +567,19 @@ function productOptions() {
       const colors = fin ? fin.colors : [];
       this.selColor = colors.some(c => c.id === s.color_id) ? s.color_id : null;
 
-      ['size', 'length', 'height'].forEach(kind => {
-        const values = this.params[kind] || [];
-        this.selParams[kind] = values.includes(s[kind]) ? s[kind] : (values[0] || null);
-        this.customActive[kind] = false;
-        this.customValues[kind] = '';
+      const wanted = s.params || {};
+      this.params.forEach(p => {
+        this.selParams[p.id] = p.values.includes(wanted[p.id]) ? wanted[p.id] : (p.values[0] || null);
+        this.customActive[p.id] = false;
+        this.customValues[p.id] = '';
       });
+    },
+
+    // Значения параметров из URL: ?p3=20 (ключ — как у фильтра каталога)
+    _paramsFromQuery(q) {
+      const res = {};
+      this.params.forEach(p => { res[p.id] = q.get('p' + p.id); });
+      return res;
     },
 
     _syncUrl(replace = false) {
@@ -513,8 +588,8 @@ function productOptions() {
       if (this.sel.grade_id)    q.set('grade', this.sel.grade_id);
       if (this.sel.finish_id)   q.set('finish', this.sel.finish_id);
       if (this.selColor)        q.set('color', this.selColor);
-      ['size', 'length', 'height'].forEach(kind => {
-        if (this.selParams[kind] && !this.customActive[kind]) q.set(kind, this.selParams[kind]);
+      this.params.forEach(p => {
+        if (this.selParams[p.id] && !this.customActive[p.id]) q.set('p' + p.id, this.selParams[p.id]);
       });
       const url = q.toString() ? '?' + q.toString() : location.pathname;
       if (replace) history.replaceState({}, '', url);
@@ -560,8 +635,7 @@ function productOptions() {
       this.customSubmitted = false;
     },
     selectMaterial(id) {
-      this._applyState({ material_id: id, size: this.selParams.size,
-                         length: this.selParams.length, height: this.selParams.height });
+      this._applyState({ material_id: id, params: Object.assign({}, this.selParams) });
       this._resetColorUI();
       this._syncUrl();
     },
@@ -604,6 +678,22 @@ function productOptions() {
     selectImageIndex(i) {
       this.activeIndex = i;
     },
+    showImage(delta) {
+      const n = this.galleryList.length;
+      if (n > 1) this.activeIndex = (this.shownIndex + delta + n) % n;
+    },
+    touchStart(e) {
+      const t = e.changedTouches[0];
+      this.touch = { x: t.clientX, y: t.clientY };
+    },
+    touchEnd(e) {
+      if (!this.touch) return;
+      const t = e.changedTouches[0];
+      const dx = t.clientX - this.touch.x, dy = t.clientY - this.touch.y;
+      this.touch = null;
+      // Горизонтальный жест — листаем; вертикальный — это прокрутка страницы
+      if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)) this.showImage(dx < 0 ? 1 : -1);
+    },
 
     submitCustomColor() {
       if (!this.customText.trim()) return;
@@ -628,11 +718,12 @@ function productOptions() {
     },
 
     // ── Подбор фото по правилам ──
+    // Правило = набор ракурсов одного исполнения (фото с одинаковыми условиями).
     // 1) отсеять правила, где заполненное условие противоречит выбору
     //    (условие по не выбранному измерению — тоже противоречие);
     // 2) из оставшихся — максимум совпавших условий;
     // 3) тай-брейк: цвет (точный, потом группа) > обработка > материал.
-    get ruleImage() {
+    get exactRule() {
       const selColorObj = this.colors.find(c => c.id === this.selColor) || null;
       let best = null, bestScore = -1, bestWeight = -1;
       for (const r of this.photoRules) {
@@ -657,11 +748,45 @@ function productOptions() {
           best = r; bestScore = score; bestWeight = weight;
         }
       }
-      return best ? best.urls : null;
+      return best;
+    },
+    // Фото выбранного исполнения нет, а общих фото у товара нет тоже —
+    // показываем ближайшее исполнение (с теми же весами совпадений, но без
+    // отсева противоречий) с пометкой, что на фото другое. Раньше тут шли
+    // все фото правил подряд — вперемешку все цвета и обработки.
+    get nearestRule() {
+      if (this.exactRule || !this.product.gallery_is_fallback) return null;
+      const selColorObj = this.colors.find(c => c.id === this.selColor) || null;
+      let best = null, bestWeight = -1;
+      for (const r of this.photoRules) {
+        const weight =
+          (r.material_id != null && r.material_id === this.sel.material_id ? 1 : 0) +
+          (r.finish_id   != null && r.finish_id   === this.sel.finish_id   ? 2 : 0) +
+          (r.color_id    != null && r.color_id    === this.selColor        ? 4 : 0) +
+          (r.color_group != null && selColorObj && selColorObj.group === r.color_group ? 3 : 0);
+        if (weight > bestWeight) { best = r; bestWeight = weight; }
+      }
+      return best;
+    },
+    get ruleSet() {
+      const r = this.exactRule || this.nearestRule;
+      return r ? r.images : null;
     },
 
+    // Что листается: ракурсы выбранного исполнения, за ними — общие фото
+    // (чертёж, монтаж). Если общих нет и images — подмена из правил, её
+    // не дописываем, иначе ракурсы задублируются.
+    get galleryList() {
+      const set = this.ruleSet;
+      if (!set) return this.images;
+      return this.product.gallery_is_fallback ? set : set.concat(this.images);
+    },
+    // Страховка от выхода за список (например, общих фото нет — подмена)
+    get shownIndex() {
+      return this.activeIndex < this.galleryList.length ? this.activeIndex : 0;
+    },
     get currentImage() {
-      return this.ruleImage || this.images[this.activeIndex] || this.images[0] || null;
+      return this.galleryList[this.shownIndex] || null;
     },
     get displayImage() {
       const img = this.currentImage;
@@ -686,17 +811,15 @@ function productOptions() {
     },
 
     get paramConfigs() {
-      return [
-        { kind: 'size',   title: 'Размер', unit: '',    customLabel: 'Свой размер',
-          placeholder: 'Например: 25×25',
-          values: this.params.size || [],   allowCustom: this.product.allow_custom_size },
-        { kind: 'length', title: 'Длина',  unit: ' м',  customLabel: 'Своя длина',
-          placeholder: 'Например: 2.7',
-          values: this.params.length || [], allowCustom: this.product.allow_custom_length },
-        { kind: 'height', title: 'Высота', unit: ' мм', customLabel: 'Своя высота',
-          placeholder: 'Например: 60',
-          values: this.params.height || [], allowCustom: this.product.allow_custom_height },
-      ];
+      return this.params.map(p => ({
+        kind:        p.id,
+        title:       p.name,
+        unit:        p.unit ? ' ' + p.unit : '',
+        customLabel: p.custom_label,
+        placeholder: p.example ? 'Например: ' + p.example : '',
+        values:      p.values,
+        allowCustom: p.allow_custom,
+      }));
     },
 
     paramLabel(param) {
@@ -708,13 +831,21 @@ function productOptions() {
       return v ? v + param.unit : '';
     },
 
-    // Значение параметра для корзины/подписи (учитывает «свой …»)
-    _paramValue(kind, unit) {
-      if (this.customActive[kind]) {
-        const v = this.customValues[kind].trim();
-        return v ? v + unit + ' (свой)' : null;
+    // Значение параметра для корзины/подписи (учитывает «своё значение»)
+    _paramValue(param) {
+      if (this.customActive[param.kind]) {
+        const v = (this.customValues[param.kind] || '').trim();
+        return v ? v + param.unit + ' (свой)' : null;
       }
-      return this.selParams[kind] ? this.selParams[kind] + unit : null;
+      const v = this.selParams[param.kind];
+      return v ? v + param.unit : null;
+    },
+
+    // Выбранные параметры читаемыми строками: [{name: 'Длина', value: '3 м'}]
+    get selectedParams() {
+      return this.paramConfigs
+        .map(p => ({ name: p.title, value: this._paramValue(p) }))
+        .filter(p => p.value);
     },
 
     get selectionSummary() {
@@ -723,18 +854,9 @@ function productOptions() {
       if (this.currentGrade)    parts.push(this.currentGrade.name);
       if (this.currentFinish)   parts.push(this.currentFinish.name);
       if (this.selectedColorName) parts.push(this.selectedColorName);
-      const size = this._paramValue('size', '');
-      const len  = this._paramValue('length', ' м');
-      const h    = this._paramValue('height', ' мм');
-      if (size) parts.push(size);
-      if (len)  parts.push(len);
-      if (h)    parts.push(h);
+      this.selectedParams.forEach(p => parts.push(p.value));
       return parts.join(' · ');
     },
-    get photoCaption() {
-      return this.selectionSummary;
-    },
-
     // ── RAL-палитра ──
     get popularColors() {
       // Первыми — цвета, под которые у товара есть своё фото-правило
@@ -745,15 +867,13 @@ function productOptions() {
     },
 
     get availableRalFamilies() {
-      const labels = {
-        all: 'Все', white: 'Белые', gray: 'Серые', black: 'Чёрные',
-        brown: 'Коричневые', blue: 'Синие', green: 'Зелёные',
-        metallic: 'Металлик', other: 'Другие',
-      };
+      // Группы и их порядок — из Color.COLOR_GROUP_CHOICES; показываем только
+      // те, в которых у текущей обработки есть цвета
       const present = new Set(this.colors.map(c => c.group || 'other'));
-      const order = ['white', 'gray', 'black', 'brown', 'blue', 'green', 'metallic', 'other'];
       const result = [{ key: 'all', label: 'Все' }];
-      order.forEach(k => { if (present.has(k)) result.push({ key: k, label: labels[k] }); });
+      this.colorGroups.forEach(([k, label]) => {
+        if (present.has(k)) result.push({ key: k, label: label });
+      });
       return result;
     },
 
@@ -782,9 +902,7 @@ function productOptions() {
         steel_grade: this.currentGrade    ? this.currentGrade.name    : null,
         finish:      this.currentFinish   ? this.currentFinish.name   : null,
         color:       this.selectedColorName || null,
-        size:        this._paramValue('size', ''),
-        length:      this._paramValue('length', ' м'),
-        height:      this._paramValue('height', ' мм'),
+        params:      this.selectedParams,
       };
       if (this.customSubmitted && this.customLastText) {
         item.color = null;

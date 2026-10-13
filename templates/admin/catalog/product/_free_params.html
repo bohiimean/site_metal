@@ -1,0 +1,56 @@
+{% comment %}
+Свободные параметры товара (справочник «Параметры товара — Размеры»). Блок повторяется
+под каждой обработкой, но редактирует один общий список товара — params
+в optionsTree() (change_form.html).
+{% endcomment %}
+<div class="opt-leaf-params">
+  <p class="opt-label">Параметры
+    <span class="opt-count">— общие для всего товара, правка видна во всех обработках</span></p>
+  <template x-for="(entry, i) in params" :key="entry.parameter_id">
+    <div class="opt-param-row">
+      <p class="opt-param-name">
+        <span x-text="paramTitle(entry)"></span>
+        <small x-text="paramHint(entry)"></small>
+        <small>
+          <button type="button" class="opt-btn-sm" title="Выше"
+                  :disabled="i === 0" @click="moveParameter(i, -1)">↑</button>
+          <button type="button" class="opt-btn-sm" title="Ниже"
+                  :disabled="i === params.length - 1" @click="moveParameter(i, 1)">↓</button>
+          <button type="button" class="opt-btn-sm" style="color:#c62828"
+                  @click="removeParameter(i)">убрать</button>
+        </small>
+      </p>
+      <div class="opt-chips">
+        <template x-for="(val, vi) in entry.values" :key="val">
+          <span class="opt-chip">
+            <span x-text="val"></span>
+            <button type="button" title="Убрать"
+                    @click="entry.values.splice(vi, 1)">×</button>
+          </span>
+        </template>
+        <input type="text" class="opt-chip-input" placeholder="+ значение"
+               :list="'param-suggestions-' + entry.parameter_id"
+               @keydown.enter.prevent="addParam(entry, $event.target)"
+               @blur="addParam(entry, $event.target)">
+        <label class="opt-check" style="margin-left:8px;">
+          <input type="checkbox" x-model="entry.custom">
+          <span x-text="paramDict(entry) ? paramDict(entry).custom_label.toLowerCase() : 'своё значение'"></span>
+        </label>
+      </div>
+    </div>
+  </template>
+  <div class="opt-source-row">
+    <select class="opt-palette-select" @change="addParameter($event.target)"
+            x-show="availableParameters.length">
+      <option value="">+ добавить параметр…</option>
+      <template x-for="p in availableParameters" :key="p.id">
+        <option :value="p.id" x-text="p.name + (p.unit ? ', ' + p.unit : '')"></option>
+      </template>
+    </select>
+    <a class="opt-btn-sm" href="{% url 'admin:references_parameter_changelist' %}"
+       target="_blank">справочник размеров ↗</a>
+    <span class="opt-count" x-show="params.some(e => !e.values.length && !e.custom)">
+      параметр без значений и без «своего» не сохранится
+    </span>
+  </div>
+</div>

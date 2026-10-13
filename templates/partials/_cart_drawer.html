@@ -92,14 +92,11 @@
                        x-text="[item.material, item.steel_grade, item.finish]
                          .filter(Boolean).join(' / ')"></p>
                     <p class="text-[11px] text-muted mb-2.5"
-                       x-show="item.color || item.size || item.length || item.height || item.note"
-                       x-text="[
-                         item.color  ? 'Цвет: ' + item.color     : null,
-                         item.size   ? 'Размер: ' + item.size    : null,
-                         item.length ? 'Длина: ' + item.length   : null,
-                         item.height ? 'Высота: ' + item.height  : null,
-                         item.note || null,
-                       ].filter(Boolean).join(' · ')"></p>
+                       x-show="item.color || cartParams(item).length || item.note"
+                       x-text="[item.color ? 'Цвет: ' + item.color : null]
+                         .concat(cartParams(item).map(p => p.name + ': ' + p.value))
+                         .concat([item.note || null])
+                         .filter(Boolean).join(' · ')"></p>
 
                     <div class="flex items-center justify-between">
                       <!-- Степпер количества -->
@@ -119,7 +116,7 @@
                         </button>
                       </div>
                       <!-- Цена — по запросу -->
-                      <p class="text-[11px] font-medium text-muted">Цена по запросу</p>
+                      <p class="text-[11px] font-medium text-muted">{{ site.price_label }}</p>
                     </div>
                   </div>
 
@@ -232,8 +229,24 @@
             </div>
             <span class="text-[11.5px] text-muted leading-relaxed">
               Согласен на обработку персональных данных в соответствии с
-              <a href="/politika-konfidentsialnosti/" class="text-accent underline underline-offset-2"
+              <a href="/politika-konfidentsialnosti/" target="_blank" class="text-accent underline underline-offset-2"
                  @click.stop>политикой конфиденциальности</a>
+            </span>
+          </div>
+
+          <!-- Условия продажи — отдельная галочка: принятие условий и согласие
+               на обработку ПДн юридически разные действия -->
+          <div class="flex items-start gap-2.5 cursor-pointer select-none mt-3" @click="agreeTerms = !agreeTerms">
+            <div class="w-4 h-4 shrink-0 border rounded-sm mt-0.5 flex items-center justify-center transition-colors"
+                 :class="agreeTerms ? 'bg-accent border-accent text-accent-fg' : 'border-border-strong bg-surface'">
+              <svg x-show="agreeTerms" width="10" height="10" viewBox="0 0 12 12" fill="none">
+                <path d="M2 6l3 3 5-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </div>
+            <span class="text-[11.5px] text-muted leading-relaxed">
+              Ознакомлен и согласен с
+              <a href="/usloviya-prodazhi/" target="_blank" class="text-accent underline underline-offset-2"
+                 @click.stop>условиями продажи</a>
             </span>
           </div>
 
