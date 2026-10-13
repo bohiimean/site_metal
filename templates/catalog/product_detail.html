@@ -399,8 +399,9 @@
 
       <!-- Описание -->
       {% if product.description %}
-      <div class="border-t border-border pt-5">
-        <p class="text-[13px] text-muted leading-relaxed">{{ product.description }}</p>
+      <!-- Описание — обычный текст: переносы и абзацы менеджера сохраняем -->
+      <div class="border-t border-border pt-5 text-[13px] text-muted leading-relaxed space-y-3">
+        {{ product.description|linebreaks }}
       </div>
       {% endif %}
 

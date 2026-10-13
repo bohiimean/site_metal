@@ -146,6 +146,13 @@ html {
            flex flex-col;
   }
 
+  /* Низ карточки: подпись цены + кнопка. На узкой карточке (телефон —
+     две колонки, сетка рядом с фильтрами) кнопка переносится на свою
+     строку, а не обрезается краем карточки */
+  .product-card-actions {
+    @apply flex flex-wrap items-center justify-between gap-2 mt-auto pt-2;
+  }
+
   /* Плейсхолдер изображения (диагональная штриховка, как в дизайне) */
   .img-placeholder {
     @apply flex items-center justify-center text-muted
