@@ -140,7 +140,7 @@ Cron (`crontab -e` от root):
 | Изображения (оригиналы + пресеты) | volume `metal_media_data` |
 | БД | volume `metal_postgres_data` |
 | Сертификаты | volume `metal_certbot_certs` |
-| Статика (collectstatic) | volume `metal_static_data`, отдаёт nginx |
+| Статика (collectstatic) | volume `metal_static_data`, отдаёт nginx; имена с хэшем содержимого (`output.3f9a1c….css`), поэтому после выкатки браузеры сразу берут новый CSS/JS |
 | Логи приложения | `docker compose -f docker-compose.prod.yml logs web` |
 | Бэкапы БД локально | `/opt/backups/db` (14 дней) |
 
