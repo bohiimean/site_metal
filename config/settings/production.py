@@ -29,7 +29,20 @@ RATELIMIT_IP_META_KEY = 'HTTP_X_REAL_IP'
 # incr атомарный (Redis INCRBY). E003 (не-shared кэш) НЕ глушить.
 SILENCED_SYSTEM_CHECKS = ['django_ratelimit.W001']
 
-SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+# Хэш содержимого в имени статики (output.3f9a1c….css): nginx кэширует
+# /static/ на 30 дней, и с постоянным именем после выкатки браузер брал
+# старый CSS к новой разметке. Новое содержимое — новый адрес.
+# collectstatic (start-prod.sh) пишет файлы с хэшем и staticfiles.json.
+STORAGES = {
+    'default': {
+        'BACKEND': 'django.core.files.storage.FileSystemStorage',
+    },
+    'staticfiles': {
+        'BACKEND': 'django.contrib.staticfiles.storage.ManifestStaticFilesStorage',
+    },
+}
+
+SECURE_PROXY_SSL_HEADER =('HTTP_X_FORWARDED_PROTO', 'https')
 SECURE_SSL_REDIRECT = True
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
