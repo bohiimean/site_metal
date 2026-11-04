@@ -120,6 +120,11 @@
           </template>
         </div>
       </template>
+      {% if product.description %}
+      <div class="hidden lg:block mt-6">
+        {% include "catalog/_product_description.html" %}
+      </div>
+      {% endif %}
     </div>
 
     <!-- ─── Информация о товаре ─── -->
@@ -397,11 +402,10 @@
         </button>
       </div>
 
-      <!-- Описание -->
+      <!-- На телефоне описание остаётся после кнопок заказа -->
       {% if product.description %}
-      <!-- Описание — обычный текст: переносы и абзацы менеджера сохраняем -->
-      <div class="border-t border-border pt-5 text-[13px] text-muted leading-relaxed space-y-3">
-        {{ product.description|linebreaks }}
+      <div class="lg:hidden">
+        {% include "catalog/_product_description.html" %}
       </div>
       {% endif %}
 
